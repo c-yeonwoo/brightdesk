@@ -227,8 +227,7 @@ export const toggleFactActive = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { getKbClient } = await import("./kb-client.server");
     const sb = getKbClient();
-    const { error } = await sb
-      .from("kb_facts")
+    const { error } = await (sb.from("kb_facts") as any)
       .update({ is_active: data.is_active })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
