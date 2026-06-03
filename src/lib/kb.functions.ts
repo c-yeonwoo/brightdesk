@@ -114,12 +114,13 @@ export const getFactDetail = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { getKbClient } = await import("./kb-client.server");
     const sb = getKbClient();
-    const { data: fact, error } = await sb
+    const { data: factRaw, error } = await sb
       .from("kb_facts")
       .select("*")
       .eq("id", data.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
+    const fact = factRaw as any;
     if (!fact) return { fact: null, sources: [] };
     const ids = (fact.source_doc_ids ?? []) as string[];
     let sources: any[] = [];
