@@ -57,10 +57,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "KB Monitor — 경제 지식베이스 대시보드" },
+      { title: "BrightDesk — 똑똑한 투자 인사이트 데스크" },
       {
         name: "description",
-        content: "투자 리서치 파이프라인을 모니터링하고 큐레이션하는 관리 대시보드.",
+        content: "BrightDesk는 시장 시그널·모의 포트폴리오·시나리오 분석을 한곳에서 제공하는 개인 투자 인사이트 데스크입니다.",
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
