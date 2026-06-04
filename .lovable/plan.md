@@ -1,62 +1,136 @@
-## 전체 구조 (7단계 순차 진행)
+# BrightDesk 재편 플랜
 
-KB(지식베이스)는 이미 1차 완성 — 이제 그 위에 가격 데이터·시그널·시뮬레이션·최적화·포트폴리오 대시보드를 쌓습니다.
+## 핵심 컨셉
 
----
+- **Track A (BrightDesk Live)**: 1,000만원으로 24/7 실시간 운용. 1시간마다 수집→분석→리밸런싱. 서비스의 "실증" 트랙.
+- **Track B (My Portfolio)**: 유저가 자기 포트폴리오를 입력하면 KB+시그널 근거로 AI가 매수/매도/비중 재구성을 추천.
+- **모든 결정은 근거(KB+기본적+기술적) + 승률 통계**가 항상 표시.
 
-### Phase 1. 데이터 수집 파이프라인 (스켈레톤)
-- 4개 소스 어댑터 인터페이스(`Collector`) 정의 — broker_pdf / mijueun_youtube / snoomi_kakao / news
-- 각 어댑터는 mock fetcher로 시작 → `raw_documents` insert
-- `/api/public/cron/collect` 엔드포인트 (서명 검증) — pg_cron이 시간당 호출
-- 어드민 UI에 "Run collector now" 버튼
+## 메뉴 재편 (7개 → 4개)
 
-### Phase 2. KB 정제 (LLM 추출)
-- `raw_documents.processed_at IS NULL` 큐를 Lovable AI Gateway(google/gemini-2.5-flash)로 처리
-- 출력 스키마: `{domain, fact_key, title, summary, related_tickers, sentiment, reliability}`
-- `kb_facts` upsert(`fact_key` unique), `source_doc_ids` 누적
-- 처리 결과 Facts 페이지에 실시간 반영
+```
+대시보드  │  내 포트폴리오  │  인사이트  │  데이터
+```
 
-### Phase 3. 가격 데이터 & 기술 지표
-- `prices` 테이블 (ticker, date, ohlcv) + `indicators` 테이블 (rsi14, macd, ma20/60/120)
-- 무료 소스(Yahoo/Naver) 어댑터 — 일봉 우선
-- 지표 계산은 순수 TS로 (`src/lib/indicators.ts`)
-- Tickers 페이지에 차트 + 지표 표시
+- **대시보드**: Track A 라이브 성과(자산 곡선·현재 보유·24h 액션) + 오늘의 결정 요약 + KB 하이라이트 + "내 포트폴리오 분석" CTA
+- **내 포트폴리오** (Track B): 입력 → AI 재구성 추천(매수/매도/비중+근거+예상승률) → 과거 추천 히스토리
+- **인사이트**: 종합 분석(섹터/종목/시나리오 탭) + 시그널 히스토리 + Facts 타임라인 — 기존 signals/scenarios/facts/tickers 통합
+- **데이터**: 파이프라인 상태 + 원본 문서 + 일별 갱신 현황 — 기존 pipeline/documents 통합
 
-### Phase 4. 시그널 엔진 (룰 기반)
-- `signals` 테이블 (ticker, ts, kind: BUY/SELL/HOLD, score, reasons[])
-- 룰 예: RSI<30 + KB sentiment>0.5 + 관련 fact 3건 이상 → BUY score
-- 결정론적·재현 가능 (백테스트용)
-- Signals 페이지 신설
+기존 라우트(`/signals`, `/scenarios`, `/facts`, `/tickers`, `/actions`, `/documents`, `/pipeline`)는 새 페이지의 탭/섹션으로 흡수. 라우트 자체는 당분간 유지 후 deprecate.
 
-### Phase 5. 1000만원 모의 포트폴리오
-- `portfolios / positions / transactions` 테이블
-- 체결가(다음날 시가) + 수수료 0.015% + 거래세 0.18% 모델
-- 시그널 → 가상 매매 자동 적용
-- Portfolio 페이지: 보유, 손익, 거래내역
+## 분석 엔진 강화 (근거 + 승률)
 
-### Phase 6. 시나리오 백테스트 & 최적화
-- `scenarios` 테이블 (params jsonb: 배분%, 손절·익절, 소스가중치)
-- 10개 시나리오 grid 생성 → 과거 6개월 백테스트
-- 스코어: Sharpe / 누적수익 / MDD
-- Scenarios 페이지: 비교 테이블 + 최적 선택
+기존 `signals.server.ts`는 기술적+KB 감성만 점수화. 다음을 추가:
 
-### Phase 7. 최종 포트폴리오 배치 & 가이드 + 서비스 정비 ✅
-- 최적 시나리오 → 실제 배분안 생성 (`/actions`)
-- Dashboard에 "오늘의 액션" 진입 버튼
-- **서비스 네이밍 변경**: KB Monitor → **Sentinel** (Signal · Portfolio · Knowledge)
-- **네비게이션 재구성**: 분석(대시보드/액션/시그널/포트폴리오/시나리오/종목) · 지식베이스(Facts/원본) · 운영(파이프라인) 3그룹
+### 1. 기본적 분석 레이어
+- 종목별 `fundamentals` 테이블: PER/PBR/ROE/매출성장/부채비율/배당 (수집은 일 1회)
+- `computeFundamentalScore(ticker)` → -2..+2 점수 + 근거 문자열 배열
 
----
+### 2. 시그널 산출 구조 개편
+- `computeSignal()`을 3개 컴포넌트로 분해:
+  - `technicalScore` (RSI/MACD/MA) + reasons
+  - `fundamentalScore` (재무지표) + reasons
+  - `kbScore` (KB 감성·신뢰도 가중) + reasons + fact_ids
+- 최종 `score = w_t*technical + w_f*fundamental + w_k*kb` (가중치는 scenario.params)
+- DB `signals` 테이블에 `technical_score`, `fundamental_score`, `kb_score`, `weights` 컬럼 추가
 
-## 기술 결정
+### 3. 승률 추적
+- 새 테이블 `signal_outcomes`: signal_id, ticker, kind, entry_price, t+5d/t+20d return, hit(목표달성여부)
+- 일배치(cron): 과거 시그널의 N일 후 가격 → outcome 기록
+- 집계 뷰 `signal_winrate_by_kind`: BUY/SELL × (score 구간) → 승률·평균수익률·표본수
+- UI에서 모든 시그널 카드에 "유사 조건 과거 승률 62% (n=48, +3.2%)" 표시
 
-- **오케스트레이션**: Supabase pg_cron + `/api/public/cron/*` 엔드포인트 (호스팅 비용 0, Prefect는 외부 인프라 필요해서 보류)
-- **LLM**: Lovable AI Gateway (`google/gemini-2.5-flash` 기본, 정제는 `gemini-2.5-pro`)
-- **크롤러**: 1차는 mock + RSS/정적 HTML만. Playwright(카카오), PDF 파싱은 외부 워커가 필요해서 별도 단계
-- **DB**: 전부 Lovable Cloud (이미 구성됨)
+### 4. 비중 산정 근거화
+- 단순 `allocPctPerTrade` 대신:
+  - 기본 비중 = `min(maxPerStock, baseAlloc * confidenceMultiplier)`
+  - `confidence = sigmoid(score)` × 승률 × KB신뢰도
+  - 각 비중 표시 시 "신뢰도 0.71 × 승률 62% × KB신뢰도 0.8 = 비중 12%" 풀어서 노출
 
-## 진행 방식
+## DB 마이그레이션 (1차)
 
-각 Phase 끝나면 동작 확인 후 다음으로. 한 메시지에 Phase 1+2 정도씩 묶어서 진행하고, Phase 3부터는 단계별로.
+```sql
+-- Track 구분
+ALTER TABLE portfolios ADD COLUMN kind TEXT NOT NULL DEFAULT 'system'
+  CHECK (kind IN ('system','user'));
+ALTER TABLE portfolios ADD COLUMN owner_id UUID; -- 추후 auth용, nullable
 
-승인하시면 **Phase 1 (수집 파이프라인 스켈레톤 + cron 엔드포인트)** 부터 시작합니다.
+-- 시그널 점수 분해
+ALTER TABLE signals
+  ADD COLUMN technical_score NUMERIC,
+  ADD COLUMN fundamental_score NUMERIC,
+  ADD COLUMN kb_score NUMERIC,
+  ADD COLUMN weights JSONB,
+  ADD COLUMN confidence NUMERIC;
+
+-- 기본적 분석
+CREATE TABLE fundamentals (
+  id UUID PK, ticker TEXT, as_of DATE,
+  per NUMERIC, pbr NUMERIC, roe NUMERIC,
+  revenue_growth NUMERIC, debt_ratio NUMERIC, dividend_yield NUMERIC,
+  source TEXT, fetched_at TIMESTAMPTZ
+);
+
+-- 승률 추적
+CREATE TABLE signal_outcomes (
+  id UUID PK, signal_id UUID, ticker TEXT, kind TEXT,
+  entry_date DATE, entry_price NUMERIC,
+  ret_5d NUMERIC, ret_20d NUMERIC, hit BOOLEAN,
+  evaluated_at TIMESTAMPTZ
+);
+
+-- 유저 포트폴리오 입력
+CREATE TABLE user_portfolio_inputs (
+  id UUID PK, portfolio_id UUID, ticker TEXT, qty NUMERIC,
+  avg_price NUMERIC, created_at TIMESTAMPTZ
+);
+
+-- AI 재구성 추천 결과
+CREATE TABLE rebalance_recommendations (
+  id UUID PK, portfolio_id UUID, generated_at TIMESTAMPTZ,
+  actions JSONB,   -- [{action,ticker,from_weight,to_weight,reasons,confidence,winrate}]
+  rationale TEXT, expected_return NUMERIC, expected_risk NUMERIC
+);
+```
+
+모든 public 테이블 GRANT + RLS 포함.
+
+## Cron 설정
+
+`/api/public/cron/hourly-rebalance` (신규):
+1. `runCollection()` + `runRefiner()`
+2. `generateSignalsForAll()` (3-팩터 점수)
+3. Track A 자동 실행: `applyAllRecentSignals(systemPortfolioId)` — 단, **조건충족시에만** 매매 (confidence ≥ 임계값)
+4. `snapshotPortfolio(systemPortfolioId)`
+
+일배치(`/api/public/cron/daily-outcomes`):
+- 미평가 시그널 → N일후 가격 조회 → `signal_outcomes` 기록
+
+pg_cron 등록은 마이그레이션과 별도로 insert 도구로.
+
+## 실행 순서 (이번 턴)
+
+1. **마이그레이션**: 위 DDL 일괄 (kind/시그널확장/fundamentals/outcomes/user_inputs/recommendations)
+2. **메뉴 재편**: `AppShell.tsx` 4메뉴로 단순화
+3. **새 라우트 3종**: `/insights`, `/data`, `/my-portfolio` (기존 라우트는 리다이렉트 또는 deprecated 유지)
+4. **분석 엔진**: `fundamentals.server.ts` + `signals.server.ts` 3-팩터 개편 + `outcomes.server.ts` (승률 계산)
+5. **시그널 UI 컴포넌트**: `SignalCard` — 3-팩터 분해, 근거 리스트, 승률 배지, 비중 산식 항상 노출
+6. **Track A 분리**: `getOrCreateSystemPortfolio()` (kind='system') + Track A 전용 `executeIfConfident()`
+7. **Track B**: `/my-portfolio` 입력 폼(수동+CSV) → "AI 재구성" 버튼 → 추천 카드 렌더
+8. **대시보드 리디자인**: Track A 자산곡선 + 오늘의 액션 + KB 하이라이트 + Track B CTA
+9. **Cron 라우트 2개** + pg_cron 등록 SQL
+
+## 기술 메모 (비기술 유저는 무시)
+
+- 기본적 분석 수집은 일단 yahoo/financial summary 또는 더미 시드 (수집기는 향후 확장)
+- 승률 계산은 가격 데이터가 있는 종목 한정, 표본 < 5면 "데이터 부족" 표시
+- Track A는 confidence threshold 0.6 + 일 최대 거래수 cap (과매매 방지)
+- Track B 추천은 read-only — 절대 실거래 X
+- 가중치 기본값: w_t=0.35, w_f=0.30, w_k=0.35 (scenario에서 튜닝)
+
+## 다음 턴 이후
+
+- 유저 인증 (Track B 다중 유저화)
+- CSV/증권사 API 업로드
+- 시나리오 자동 그리드 서치로 가중치 최적화
+- 백테스트 결과를 승률 통계에 합산

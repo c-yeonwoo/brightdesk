@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      fundamentals: {
+        Row: {
+          as_of: string
+          debt_ratio: number | null
+          dividend_yield: number | null
+          fetched_at: string
+          id: string
+          pbr: number | null
+          per: number | null
+          revenue_growth: number | null
+          roe: number | null
+          source: string | null
+          ticker: string
+        }
+        Insert: {
+          as_of: string
+          debt_ratio?: number | null
+          dividend_yield?: number | null
+          fetched_at?: string
+          id?: string
+          pbr?: number | null
+          per?: number | null
+          revenue_growth?: number | null
+          roe?: number | null
+          source?: string | null
+          ticker: string
+        }
+        Update: {
+          as_of?: string
+          debt_ratio?: number | null
+          dividend_yield?: number | null
+          fetched_at?: string
+          id?: string
+          pbr?: number | null
+          per?: number | null
+          revenue_growth?: number | null
+          roe?: number | null
+          source?: string | null
+          ticker?: string
+        }
+        Relationships: []
+      }
       indicators: {
         Row: {
           computed_at: string
@@ -145,7 +187,9 @@ export type Database = {
           created_at: string
           id: string
           initial_cash: number
+          kind: string
           name: string
+          owner_id: string | null
           updated_at: string
         }
         Insert: {
@@ -153,7 +197,9 @@ export type Database = {
           created_at?: string
           id?: string
           initial_cash?: number
+          kind?: string
           name: string
+          owner_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -161,7 +207,9 @@ export type Database = {
           created_at?: string
           id?: string
           initial_cash?: number
+          kind?: string
           name?: string
+          owner_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -285,6 +333,36 @@ export type Database = {
         }
         Relationships: []
       }
+      rebalance_recommendations: {
+        Row: {
+          actions: Json
+          expected_return: number | null
+          expected_risk: number | null
+          generated_at: string
+          id: string
+          portfolio_id: string
+          rationale: string | null
+        }
+        Insert: {
+          actions?: Json
+          expected_return?: number | null
+          expected_risk?: number | null
+          generated_at?: string
+          id?: string
+          portfolio_id: string
+          rationale?: string | null
+        }
+        Update: {
+          actions?: Json
+          expected_return?: number | null
+          expected_risk?: number | null
+          generated_at?: string
+          id?: string
+          portfolio_id?: string
+          rationale?: string | null
+        }
+        Relationships: []
+      }
       scenarios: {
         Row: {
           created_at: string
@@ -321,42 +399,99 @@ export type Database = {
         }
         Relationships: []
       }
+      signal_outcomes: {
+        Row: {
+          entry_date: string
+          entry_price: number
+          evaluated_at: string
+          hit: boolean | null
+          id: string
+          kind: string
+          ret_20d: number | null
+          ret_5d: number | null
+          score: number | null
+          signal_id: string
+          ticker: string
+        }
+        Insert: {
+          entry_date: string
+          entry_price: number
+          evaluated_at?: string
+          hit?: boolean | null
+          id?: string
+          kind: string
+          ret_20d?: number | null
+          ret_5d?: number | null
+          score?: number | null
+          signal_id: string
+          ticker: string
+        }
+        Update: {
+          entry_date?: string
+          entry_price?: number
+          evaluated_at?: string
+          hit?: boolean | null
+          id?: string
+          kind?: string
+          ret_20d?: number | null
+          ret_5d?: number | null
+          score?: number | null
+          signal_id?: string
+          ticker?: string
+        }
+        Relationships: []
+      }
       signals: {
         Row: {
+          confidence: number | null
           created_at: string
           fact_ids: string[] | null
+          fundamental_score: number | null
           id: string
+          kb_score: number | null
           kind: Database["public"]["Enums"]["signal_kind"]
           macd_hist: number | null
           reasons: Json
           rsi14: number | null
           score: number
+          technical_score: number | null
           ticker: string
           ts: string
+          weights: Json | null
         }
         Insert: {
+          confidence?: number | null
           created_at?: string
           fact_ids?: string[] | null
+          fundamental_score?: number | null
           id?: string
+          kb_score?: number | null
           kind: Database["public"]["Enums"]["signal_kind"]
           macd_hist?: number | null
           reasons?: Json
           rsi14?: number | null
           score?: number
+          technical_score?: number | null
           ticker: string
           ts?: string
+          weights?: Json | null
         }
         Update: {
+          confidence?: number | null
           created_at?: string
           fact_ids?: string[] | null
+          fundamental_score?: number | null
           id?: string
+          kb_score?: number | null
           kind?: Database["public"]["Enums"]["signal_kind"]
           macd_hist?: number | null
           reasons?: Json
           rsi14?: number | null
           score?: number
+          technical_score?: number | null
           ticker?: string
           ts?: string
+          weights?: Json | null
         }
         Relationships: []
       }
@@ -409,6 +544,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_portfolio_inputs: {
+        Row: {
+          avg_price: number | null
+          created_at: string
+          id: string
+          portfolio_id: string
+          qty: number
+          ticker: string
+        }
+        Insert: {
+          avg_price?: number | null
+          created_at?: string
+          id?: string
+          portfolio_id: string
+          qty: number
+          ticker: string
+        }
+        Update: {
+          avg_price?: number | null
+          created_at?: string
+          id?: string
+          portfolio_id?: string
+          qty?: number
+          ticker?: string
+        }
+        Relationships: []
       }
     }
     Views: {
