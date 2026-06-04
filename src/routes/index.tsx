@@ -26,8 +26,8 @@ import type { KbDomain, SourceType } from "@/lib/kb-client.server";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "대시보드 · KB Monitor" },
-      { name: "description", content: "KB 활성 fact, 신선도, 소스별 통계 한눈에 보기." },
+      { title: "대시보드 · Sentinel" },
+      { name: "description", content: "지식베이스 · 시그널 · 모의 포트폴리오 통합 대시보드" },
     ],
   }),
   component: OverviewPage,
