@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Trash2, Sparkles, Loader2, FileUp } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
 import { SignalCard } from "@/components/kb/SignalCard";
