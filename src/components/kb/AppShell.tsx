@@ -55,9 +55,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               }}
             />
             <div className="flex flex-col leading-tight">
-              <span className="text-sm font-semibold tracking-tight">Sentinel</span>
+              <span className="text-sm font-semibold tracking-tight">BrightDesk</span>
               <span className="text-[10px] text-muted-foreground">
-                Signal · Portfolio · Knowledge
+                Insight Desk · Signal · Portfolio
               </span>
             </div>
           </Link>
