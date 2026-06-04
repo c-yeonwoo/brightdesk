@@ -1,18 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
-
-let cached: ReturnType<typeof createClient> | null = null;
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export function getKbClient() {
-  if (cached) return cached;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) {
-    throw new Error("SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY 가 설정되어 있지 않습니다.");
-  }
-  cached = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  return cached;
+  return supabaseAdmin;
 }
 
 export type SourceType = "broker_pdf" | "mijueun_youtube" | "snoomi_kakao" | "news";

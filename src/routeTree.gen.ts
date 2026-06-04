@@ -10,13 +10,20 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TickersRouteImport } from './routes/tickers'
+import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as FactsRouteImport } from './routes/facts'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicCronCollectRouteImport } from './routes/api/public/cron/collect'
 
 const TickersRoute = TickersRouteImport.update({
   id: '/tickers',
   path: '/tickers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PipelineRoute = PipelineRouteImport.update({
+  id: '/pipeline',
+  path: '/pipeline',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FactsRoute = FactsRouteImport.update({
@@ -34,39 +41,71 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicCronCollectRoute = ApiPublicCronCollectRouteImport.update({
+  id: '/api/public/cron/collect',
+  path: '/api/public/cron/collect',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
+  '/pipeline': typeof PipelineRoute
   '/tickers': typeof TickersRoute
+  '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
+  '/pipeline': typeof PipelineRoute
   '/tickers': typeof TickersRoute
+  '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
+  '/pipeline': typeof PipelineRoute
   '/tickers': typeof TickersRoute
+  '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/documents' | '/facts' | '/tickers'
+  fullPaths:
+    | '/'
+    | '/documents'
+    | '/facts'
+    | '/pipeline'
+    | '/tickers'
+    | '/api/public/cron/collect'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/documents' | '/facts' | '/tickers'
-  id: '__root__' | '/' | '/documents' | '/facts' | '/tickers'
+  to:
+    | '/'
+    | '/documents'
+    | '/facts'
+    | '/pipeline'
+    | '/tickers'
+    | '/api/public/cron/collect'
+  id:
+    | '__root__'
+    | '/'
+    | '/documents'
+    | '/facts'
+    | '/pipeline'
+    | '/tickers'
+    | '/api/public/cron/collect'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DocumentsRoute: typeof DocumentsRoute
   FactsRoute: typeof FactsRoute
+  PipelineRoute: typeof PipelineRoute
   TickersRoute: typeof TickersRoute
+  ApiPublicCronCollectRoute: typeof ApiPublicCronCollectRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -76,6 +115,13 @@ declare module '@tanstack/react-router' {
       path: '/tickers'
       fullPath: '/tickers'
       preLoaderRoute: typeof TickersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pipeline': {
+      id: '/pipeline'
+      path: '/pipeline'
+      fullPath: '/pipeline'
+      preLoaderRoute: typeof PipelineRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/facts': {
@@ -99,6 +145,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/cron/collect': {
+      id: '/api/public/cron/collect'
+      path: '/api/public/cron/collect'
+      fullPath: '/api/public/cron/collect'
+      preLoaderRoute: typeof ApiPublicCronCollectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -106,7 +159,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DocumentsRoute: DocumentsRoute,
   FactsRoute: FactsRoute,
+  PipelineRoute: PipelineRoute,
   TickersRoute: TickersRoute,
+  ApiPublicCronCollectRoute: ApiPublicCronCollectRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
