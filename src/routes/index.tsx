@@ -182,34 +182,28 @@ function DashboardContent({ data }: { data: any }) {
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매수</div>
-              <div className="text-lg font-semibold tabular-nums text-success">
-                {data.recent_txns.filter((t: any) => t.side === "BUY").length}
+              <div className="text-lg font-semibold tabular-nums" style={{ color: "var(--success)" }}>
+                {data.trade_ledger.filter((t: any) => t.side === "BUY" && t.executed_at >= new Date(Date.now() - 86400000).toISOString()).length}
               </div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매도</div>
-              <div className="text-lg font-semibold tabular-nums text-danger" style={{ color: "var(--danger)" }}>
-                {data.recent_txns.filter((t: any) => t.side === "SELL").length}
+              <div className="text-lg font-semibold tabular-nums" style={{ color: "var(--danger)" }}>
+                {data.trade_ledger.filter((t: any) => t.side === "SELL" && t.executed_at >= new Date(Date.now() - 86400000).toISOString()).length}
               </div>
             </div>
           </div>
-          <ul className="space-y-1.5 text-xs">
-            {data.recent_txns.slice(0, 6).map((t: any) => (
-              <li key={t.id} className="flex items-center justify-between border-t pt-1.5">
-                <span className="font-medium">{t.ticker}</span>
-                <span style={{ color: t.side === "BUY" ? "var(--success)" : "var(--danger)" }}>
-                  {t.side} {Number(t.qty)}주
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {new Date(t.executed_at).toLocaleDateString()}
-                </span>
-              </li>
-            ))}
-            {data.recent_txns.length === 0 && (
-              <li className="text-center text-muted-foreground">24h 거래 없음</li>
-            )}
-          </ul>
+          <div className="rounded-md border-t pt-3 text-[11px] text-muted-foreground">
+            <p>매 1시간 cron이 신뢰도 ≥ 임계치 시그널만 자동 체결. 모든 거래는 근거 시그널과 영구 결합됩니다.</p>
+          </div>
         </div>
+      </div>
+
+      {/* 거래 원장 (근거 첨부) */}
+      <div className="mt-6">
+        <TradeLedger trades={data.trade_ledger.slice(0, 12)} />
+      </div>
+
       </div>
 
       {/* Positions + KB highlights */}
