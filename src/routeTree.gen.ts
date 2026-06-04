@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TickersRouteImport } from './routes/tickers'
 import { Route as SignalsRouteImport } from './routes/signals'
+import { Route as ScenariosRouteImport } from './routes/scenarios'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as FactsRouteImport } from './routes/facts'
@@ -26,6 +27,11 @@ const TickersRoute = TickersRouteImport.update({
 const SignalsRoute = SignalsRouteImport.update({
   id: '/signals',
   path: '/signals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScenariosRoute = ScenariosRouteImport.update({
+  id: '/scenarios',
+  path: '/scenarios',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PortfolioRoute = PortfolioRouteImport.update({
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/facts': typeof FactsRoute
   '/pipeline': typeof PipelineRoute
   '/portfolio': typeof PortfolioRoute
+  '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/facts': typeof FactsRoute
   '/pipeline': typeof PipelineRoute
   '/portfolio': typeof PortfolioRoute
+  '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/facts': typeof FactsRoute
   '/pipeline': typeof PipelineRoute
   '/portfolio': typeof PortfolioRoute
+  '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | '/facts'
     | '/pipeline'
     | '/portfolio'
+    | '/scenarios'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/facts'
     | '/pipeline'
     | '/portfolio'
+    | '/scenarios'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/facts'
     | '/pipeline'
     | '/portfolio'
+    | '/scenarios'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
@@ -129,6 +141,7 @@ export interface RootRouteChildren {
   FactsRoute: typeof FactsRoute
   PipelineRoute: typeof PipelineRoute
   PortfolioRoute: typeof PortfolioRoute
+  ScenariosRoute: typeof ScenariosRoute
   SignalsRoute: typeof SignalsRoute
   TickersRoute: typeof TickersRoute
   ApiPublicCronCollectRoute: typeof ApiPublicCronCollectRoute
@@ -148,6 +161,13 @@ declare module '@tanstack/react-router' {
       path: '/signals'
       fullPath: '/signals'
       preLoaderRoute: typeof SignalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scenarios': {
+      id: '/scenarios'
+      path: '/scenarios'
+      fullPath: '/scenarios'
+      preLoaderRoute: typeof ScenariosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/portfolio': {
@@ -201,6 +221,7 @@ const rootRouteChildren: RootRouteChildren = {
   FactsRoute: FactsRoute,
   PipelineRoute: PipelineRoute,
   PortfolioRoute: PortfolioRoute,
+  ScenariosRoute: ScenariosRoute,
   SignalsRoute: SignalsRoute,
   TickersRoute: TickersRoute,
   ApiPublicCronCollectRoute: ApiPublicCronCollectRoute,
