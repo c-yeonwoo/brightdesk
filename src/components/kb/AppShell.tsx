@@ -1,15 +1,43 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Database, FileText, LineChart, Workflow, Zap } from "lucide-react";
+import {
+  Activity,
+  Briefcase,
+  Database,
+  FileText,
+  FlaskConical,
+  LineChart,
+  Target,
+  Workflow,
+  Zap,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
-const nav = [
-  { to: "/", label: "대시보드", icon: Activity },
-  { to: "/facts", label: "KB Facts", icon: Database },
-  { to: "/documents", label: "원본 문서", icon: FileText },
-  { to: "/tickers", label: "종목별 뷰", icon: LineChart },
-  { to: "/signals", label: "시그널", icon: Zap },
-  { to: "/pipeline", label: "파이프라인", icon: Workflow },
-] as const;
+type NavItem = { to: string; label: string; icon: typeof Activity };
+
+const navGroups: { label: string; items: NavItem[] }[] = [
+  {
+    label: "분석",
+    items: [
+      { to: "/", label: "대시보드", icon: Activity },
+      { to: "/actions", label: "오늘의 액션", icon: Target },
+      { to: "/signals", label: "시그널", icon: Zap },
+      { to: "/portfolio", label: "포트폴리오", icon: Briefcase },
+      { to: "/scenarios", label: "시나리오", icon: FlaskConical },
+      { to: "/tickers", label: "종목", icon: LineChart },
+    ],
+  },
+  {
+    label: "지식베이스",
+    items: [
+      { to: "/facts", label: "Facts", icon: Database },
+      { to: "/documents", label: "원본", icon: FileText },
+    ],
+  },
+  {
+    label: "운영",
+    items: [{ to: "/pipeline", label: "파이프라인", icon: Workflow }],
+  },
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -17,8 +45,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-6 px-6">
-          <div className="flex items-center gap-2">
+        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-4 px-6">
+          <Link to="/" className="flex items-center gap-2">
             <div
               className="h-7 w-7 rounded-md"
               style={{
@@ -27,36 +55,47 @@ export function AppShell({ children }: { children: ReactNode }) {
               }}
             />
             <div className="flex flex-col leading-tight">
-              <span className="text-sm font-semibold tracking-tight">KB Monitor</span>
+              <span className="text-sm font-semibold tracking-tight">Sentinel</span>
               <span className="text-[10px] text-muted-foreground">
-                Economic Knowledge Base
+                Signal · Portfolio · Knowledge
               </span>
             </div>
-          </div>
-          <nav className="flex items-center gap-1">
-            {nav.map((n) => {
-              const active = path === n.to || (n.to !== "/" && path.startsWith(n.to));
-              const Icon = n.icon;
-              return (
-                <Link
-                  key={n.to}
-                  to={n.to}
-                  className={
-                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors " +
-                    (active
-                      ? "bg-secondary text-secondary-foreground font-medium"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground")
-                  }
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {n.label}
-                </Link>
-              );
-            })}
+          </Link>
+
+          <nav className="ml-2 flex items-center gap-3">
+            {navGroups.map((g, gi) => (
+              <div key={g.label} className="flex items-center gap-1">
+                {gi > 0 && <span className="mx-1 h-4 w-px bg-border" />}
+                <span className="hidden text-[10px] font-medium uppercase tracking-wider text-muted-foreground md:inline">
+                  {g.label}
+                </span>
+                {g.items.map((n) => {
+                  const active =
+                    path === n.to || (n.to !== "/" && path.startsWith(n.to));
+                  const Icon = n.icon;
+                  return (
+                    <Link
+                      key={n.to}
+                      to={n.to}
+                      className={
+                        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors " +
+                        (active
+                          ? "bg-secondary text-secondary-foreground font-medium"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground")
+                      }
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {n.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
+
           <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
-            <span>읽기 전용 · 큐레이션 모드</span>
+            <span>모의 운용 모드</span>
           </div>
         </div>
       </header>

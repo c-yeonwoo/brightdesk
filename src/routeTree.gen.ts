@@ -11,9 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TickersRouteImport } from './routes/tickers'
 import { Route as SignalsRouteImport } from './routes/signals'
+import { Route as ScenariosRouteImport } from './routes/scenarios'
+import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as FactsRouteImport } from './routes/facts'
 import { Route as DocumentsRouteImport } from './routes/documents'
+import { Route as ActionsRouteImport } from './routes/actions'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicCronCollectRouteImport } from './routes/api/public/cron/collect'
 
@@ -25,6 +28,16 @@ const TickersRoute = TickersRouteImport.update({
 const SignalsRoute = SignalsRouteImport.update({
   id: '/signals',
   path: '/signals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScenariosRoute = ScenariosRouteImport.update({
+  id: '/scenarios',
+  path: '/scenarios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortfolioRoute = PortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PipelineRoute = PipelineRouteImport.update({
@@ -42,6 +55,11 @@ const DocumentsRoute = DocumentsRouteImport.update({
   path: '/documents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ActionsRoute = ActionsRouteImport.update({
+  id: '/actions',
+  path: '/actions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -55,18 +73,24 @@ const ApiPublicCronCollectRoute = ApiPublicCronCollectRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/actions': typeof ActionsRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
   '/pipeline': typeof PipelineRoute
+  '/portfolio': typeof PortfolioRoute
+  '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/actions': typeof ActionsRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
   '/pipeline': typeof PipelineRoute
+  '/portfolio': typeof PortfolioRoute
+  '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
@@ -74,9 +98,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/actions': typeof ActionsRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
   '/pipeline': typeof PipelineRoute
+  '/portfolio': typeof PortfolioRoute
+  '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
@@ -85,27 +112,36 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/actions'
     | '/documents'
     | '/facts'
     | '/pipeline'
+    | '/portfolio'
+    | '/scenarios'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/actions'
     | '/documents'
     | '/facts'
     | '/pipeline'
+    | '/portfolio'
+    | '/scenarios'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
   id:
     | '__root__'
     | '/'
+    | '/actions'
     | '/documents'
     | '/facts'
     | '/pipeline'
+    | '/portfolio'
+    | '/scenarios'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
@@ -113,9 +149,12 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ActionsRoute: typeof ActionsRoute
   DocumentsRoute: typeof DocumentsRoute
   FactsRoute: typeof FactsRoute
   PipelineRoute: typeof PipelineRoute
+  PortfolioRoute: typeof PortfolioRoute
+  ScenariosRoute: typeof ScenariosRoute
   SignalsRoute: typeof SignalsRoute
   TickersRoute: typeof TickersRoute
   ApiPublicCronCollectRoute: typeof ApiPublicCronCollectRoute
@@ -135,6 +174,20 @@ declare module '@tanstack/react-router' {
       path: '/signals'
       fullPath: '/signals'
       preLoaderRoute: typeof SignalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scenarios': {
+      id: '/scenarios'
+      path: '/scenarios'
+      fullPath: '/scenarios'
+      preLoaderRoute: typeof ScenariosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portfolio': {
+      id: '/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pipeline': {
@@ -158,6 +211,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocumentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/actions': {
+      id: '/actions'
+      path: '/actions'
+      fullPath: '/actions'
+      preLoaderRoute: typeof ActionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -177,9 +237,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ActionsRoute: ActionsRoute,
   DocumentsRoute: DocumentsRoute,
   FactsRoute: FactsRoute,
   PipelineRoute: PipelineRoute,
+  PortfolioRoute: PortfolioRoute,
+  ScenariosRoute: ScenariosRoute,
   SignalsRoute: SignalsRoute,
   TickersRoute: TickersRoute,
   ApiPublicCronCollectRoute: ApiPublicCronCollectRoute,
