@@ -14,7 +14,96 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      kb_facts: {
+        Row: {
+          domain: Database["public"]["Enums"]["kb_domain"]
+          fact_key: string
+          first_seen_at: string
+          id: string
+          is_active: boolean
+          related_tickers: string[] | null
+          reliability: number | null
+          sentiment: number | null
+          source_doc_ids: string[] | null
+          summary: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          domain: Database["public"]["Enums"]["kb_domain"]
+          fact_key: string
+          first_seen_at?: string
+          id?: string
+          is_active?: boolean
+          related_tickers?: string[] | null
+          reliability?: number | null
+          sentiment?: number | null
+          source_doc_ids?: string[] | null
+          summary?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          domain?: Database["public"]["Enums"]["kb_domain"]
+          fact_key?: string
+          first_seen_at?: string
+          id?: string
+          is_active?: boolean
+          related_tickers?: string[] | null
+          reliability?: number | null
+          sentiment?: number | null
+          source_doc_ids?: string[] | null
+          summary?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      raw_documents: {
+        Row: {
+          body: string | null
+          collected_at: string
+          content_hash: string | null
+          external_id: string | null
+          id: string
+          meta: Json | null
+          processed_at: string | null
+          published_at: string | null
+          r2_key: string | null
+          reliability: number | null
+          source: Database["public"]["Enums"]["source_type"]
+          title: string | null
+        }
+        Insert: {
+          body?: string | null
+          collected_at?: string
+          content_hash?: string | null
+          external_id?: string | null
+          id?: string
+          meta?: Json | null
+          processed_at?: string | null
+          published_at?: string | null
+          r2_key?: string | null
+          reliability?: number | null
+          source: Database["public"]["Enums"]["source_type"]
+          title?: string | null
+        }
+        Update: {
+          body?: string | null
+          collected_at?: string
+          content_hash?: string | null
+          external_id?: string | null
+          id?: string
+          meta?: Json | null
+          processed_at?: string | null
+          published_at?: string | null
+          r2_key?: string | null
+          reliability?: number | null
+          source?: Database["public"]["Enums"]["source_type"]
+          title?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +112,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      kb_domain: "macro" | "theme" | "news" | "politics"
+      source_type: "broker_pdf" | "mijueun_youtube" | "snoomi_kakao" | "news"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +240,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      kb_domain: ["macro", "theme", "news", "politics"],
+      source_type: ["broker_pdf", "mijueun_youtube", "snoomi_kakao", "news"],
+    },
   },
 } as const
