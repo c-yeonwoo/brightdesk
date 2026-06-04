@@ -4,11 +4,27 @@ export const FEE_RATE = 0.00015; // 0.015%
 export const TAX_RATE = 0.0018; // 0.18% sell-only (KR)
 
 export async function getOrCreateDefaultPortfolio() {
+  return getOrCreateSystemPortfolio();
+}
+
+export async function getOrCreateSystemPortfolio() {
   const sb = supabaseAdmin;
   const { data } = await sb.from("portfolios").select("*").eq("name", "default").maybeSingle();
   if (data) return data;
   const { data: created, error } = await (sb.from("portfolios") as any)
-    .insert({ name: "default", initial_cash: 10000000, cash: 10000000 })
+    .insert({ name: "default", kind: "system", initial_cash: 10000000, cash: 10000000 })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return created;
+}
+
+export async function getOrCreateUserPortfolio() {
+  const sb = supabaseAdmin;
+  const { data } = await sb.from("portfolios").select("*").eq("name", "user-default").maybeSingle();
+  if (data) return data;
+  const { data: created, error } = await (sb.from("portfolios") as any)
+    .insert({ name: "user-default", kind: "user", initial_cash: 0, cash: 0 })
     .select("*")
     .single();
   if (error) throw new Error(error.message);
