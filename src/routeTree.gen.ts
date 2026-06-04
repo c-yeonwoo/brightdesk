@@ -14,10 +14,14 @@ import { Route as SignalsRouteImport } from './routes/signals'
 import { Route as ScenariosRouteImport } from './routes/scenarios'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PipelineRouteImport } from './routes/pipeline'
+import { Route as MyPortfolioRouteImport } from './routes/my-portfolio'
+import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as FactsRouteImport } from './routes/facts'
 import { Route as DocumentsRouteImport } from './routes/documents'
+import { Route as DataRouteImport } from './routes/data'
 import { Route as ActionsRouteImport } from './routes/actions'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicCronHourlyRebalanceRouteImport } from './routes/api/public/cron/hourly-rebalance'
 import { Route as ApiPublicCronCollectRouteImport } from './routes/api/public/cron/collect'
 
 const TickersRoute = TickersRouteImport.update({
@@ -45,6 +49,16 @@ const PipelineRoute = PipelineRouteImport.update({
   path: '/pipeline',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MyPortfolioRoute = MyPortfolioRouteImport.update({
+  id: '/my-portfolio',
+  path: '/my-portfolio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InsightsRoute = InsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FactsRoute = FactsRouteImport.update({
   id: '/facts',
   path: '/facts',
@@ -53,6 +67,11 @@ const FactsRoute = FactsRouteImport.update({
 const DocumentsRoute = DocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DataRoute = DataRouteImport.update({
+  id: '/data',
+  path: '/data',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ActionsRoute = ActionsRouteImport.update({
@@ -65,6 +84,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicCronHourlyRebalanceRoute =
+  ApiPublicCronHourlyRebalanceRouteImport.update({
+    id: '/api/public/cron/hourly-rebalance',
+    path: '/api/public/cron/hourly-rebalance',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicCronCollectRoute = ApiPublicCronCollectRouteImport.update({
   id: '/api/public/cron/collect',
   path: '/api/public/cron/collect',
@@ -74,90 +99,118 @@ const ApiPublicCronCollectRoute = ApiPublicCronCollectRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/actions': typeof ActionsRoute
+  '/data': typeof DataRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
+  '/insights': typeof InsightsRoute
+  '/my-portfolio': typeof MyPortfolioRoute
   '/pipeline': typeof PipelineRoute
   '/portfolio': typeof PortfolioRoute
   '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
+  '/api/public/cron/hourly-rebalance': typeof ApiPublicCronHourlyRebalanceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/actions': typeof ActionsRoute
+  '/data': typeof DataRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
+  '/insights': typeof InsightsRoute
+  '/my-portfolio': typeof MyPortfolioRoute
   '/pipeline': typeof PipelineRoute
   '/portfolio': typeof PortfolioRoute
   '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
+  '/api/public/cron/hourly-rebalance': typeof ApiPublicCronHourlyRebalanceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/actions': typeof ActionsRoute
+  '/data': typeof DataRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
+  '/insights': typeof InsightsRoute
+  '/my-portfolio': typeof MyPortfolioRoute
   '/pipeline': typeof PipelineRoute
   '/portfolio': typeof PortfolioRoute
   '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
+  '/api/public/cron/hourly-rebalance': typeof ApiPublicCronHourlyRebalanceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/actions'
+    | '/data'
     | '/documents'
     | '/facts'
+    | '/insights'
+    | '/my-portfolio'
     | '/pipeline'
     | '/portfolio'
     | '/scenarios'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
+    | '/api/public/cron/hourly-rebalance'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/actions'
+    | '/data'
     | '/documents'
     | '/facts'
+    | '/insights'
+    | '/my-portfolio'
     | '/pipeline'
     | '/portfolio'
     | '/scenarios'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
+    | '/api/public/cron/hourly-rebalance'
   id:
     | '__root__'
     | '/'
     | '/actions'
+    | '/data'
     | '/documents'
     | '/facts'
+    | '/insights'
+    | '/my-portfolio'
     | '/pipeline'
     | '/portfolio'
     | '/scenarios'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
+    | '/api/public/cron/hourly-rebalance'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActionsRoute: typeof ActionsRoute
+  DataRoute: typeof DataRoute
   DocumentsRoute: typeof DocumentsRoute
   FactsRoute: typeof FactsRoute
+  InsightsRoute: typeof InsightsRoute
+  MyPortfolioRoute: typeof MyPortfolioRoute
   PipelineRoute: typeof PipelineRoute
   PortfolioRoute: typeof PortfolioRoute
   ScenariosRoute: typeof ScenariosRoute
   SignalsRoute: typeof SignalsRoute
   TickersRoute: typeof TickersRoute
   ApiPublicCronCollectRoute: typeof ApiPublicCronCollectRoute
+  ApiPublicCronHourlyRebalanceRoute: typeof ApiPublicCronHourlyRebalanceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -197,6 +250,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PipelineRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/my-portfolio': {
+      id: '/my-portfolio'
+      path: '/my-portfolio'
+      fullPath: '/my-portfolio'
+      preLoaderRoute: typeof MyPortfolioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/insights': {
+      id: '/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof InsightsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/facts': {
       id: '/facts'
       path: '/facts'
@@ -209,6 +276,13 @@ declare module '@tanstack/react-router' {
       path: '/documents'
       fullPath: '/documents'
       preLoaderRoute: typeof DocumentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/data': {
+      id: '/data'
+      path: '/data'
+      fullPath: '/data'
+      preLoaderRoute: typeof DataRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/actions': {
@@ -225,6 +299,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/cron/hourly-rebalance': {
+      id: '/api/public/cron/hourly-rebalance'
+      path: '/api/public/cron/hourly-rebalance'
+      fullPath: '/api/public/cron/hourly-rebalance'
+      preLoaderRoute: typeof ApiPublicCronHourlyRebalanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/cron/collect': {
       id: '/api/public/cron/collect'
       path: '/api/public/cron/collect'
@@ -238,25 +319,19 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActionsRoute: ActionsRoute,
+  DataRoute: DataRoute,
   DocumentsRoute: DocumentsRoute,
   FactsRoute: FactsRoute,
+  InsightsRoute: InsightsRoute,
+  MyPortfolioRoute: MyPortfolioRoute,
   PipelineRoute: PipelineRoute,
   PortfolioRoute: PortfolioRoute,
   ScenariosRoute: ScenariosRoute,
   SignalsRoute: SignalsRoute,
   TickersRoute: TickersRoute,
   ApiPublicCronCollectRoute: ApiPublicCronCollectRoute,
+  ApiPublicCronHourlyRebalanceRoute: ApiPublicCronHourlyRebalanceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -1,12 +1,23 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { computeFundamentalScore } from "./fundamentals.server";
 
 export type SignalKind = "BUY" | "SELL" | "HOLD";
+
+export interface ScoreComponent {
+  score: number;
+  reasons: string[];
+}
 
 export interface SignalRow {
   ticker: string;
   ts: string;
   kind: SignalKind;
   score: number;
+  technical_score: number;
+  fundamental_score: number;
+  kb_score: number;
+  weights: { technical: number; fundamental: number; kb: number };
+  confidence: number;
   reasons: string[];
   rsi14: number | null;
   macd_hist: number | null;
@@ -24,11 +35,7 @@ interface IndicatorRow {
   ma120: number | null;
 }
 
-interface PriceRow {
-  date: string;
-  close: number;
-}
-
+interface PriceRow { date: string; close: number }
 interface FactRow {
   id: string;
   title: string;
@@ -37,100 +44,75 @@ interface FactRow {
   updated_at: string;
 }
 
-// Rule-based scoring: combine technicals + KB sentiment.
-// Returns one signal per ticker for "now" using the latest indicator + recent facts.
-export function computeSignal(args: {
-  ticker: string;
-  latestPrice: PriceRow | null;
-  latestInd: IndicatorRow | null;
-  prevInd: IndicatorRow | null;
-  facts: FactRow[];
-}): SignalRow | null {
-  const { ticker, latestPrice, latestInd, prevInd, facts } = args;
-  if (!latestPrice || !latestInd) return null;
+export const DEFAULT_WEIGHTS = { technical: 0.35, fundamental: 0.30, kb: 0.35 };
 
+// 기술적 분석 점수 (-3 ~ +3)
+export function computeTechnicalScore(args: {
+  latestPrice: PriceRow;
+  latestInd: IndicatorRow;
+  prevInd: IndicatorRow | null;
+}): ScoreComponent {
+  const { latestPrice, latestInd, prevInd } = args;
   const reasons: string[] = [];
   let score = 0;
 
-  // --- Technical signals (range roughly -3..+3) ---
   const rsi = latestInd.rsi14;
   if (rsi != null) {
-    if (rsi < 30) {
-      score += 1.5;
-      reasons.push(`RSI 과매도 (${rsi.toFixed(1)})`);
-    } else if (rsi > 70) {
-      score -= 1.5;
-      reasons.push(`RSI 과매수 (${rsi.toFixed(1)})`);
-    }
+    if (rsi < 30) { score += 1.5; reasons.push(`RSI 과매도 ${rsi.toFixed(1)}`); }
+    else if (rsi > 70) { score -= 1.5; reasons.push(`RSI 과매수 ${rsi.toFixed(1)}`); }
+    else if (rsi < 45) { score += 0.3; reasons.push(`RSI 약세권 ${rsi.toFixed(1)}`); }
+    else if (rsi > 55) { score -= 0.3; reasons.push(`RSI 강세권 ${rsi.toFixed(1)}`); }
   }
-
   const mh = latestInd.macd_hist;
   const pmh = prevInd?.macd_hist ?? null;
   if (mh != null && pmh != null) {
-    if (pmh <= 0 && mh > 0) {
-      score += 1;
-      reasons.push("MACD 골든크로스");
-    } else if (pmh >= 0 && mh < 0) {
-      score -= 1;
-      reasons.push("MACD 데드크로스");
-    }
+    if (pmh <= 0 && mh > 0) { score += 1; reasons.push("MACD 골든크로스"); }
+    else if (pmh >= 0 && mh < 0) { score -= 1; reasons.push("MACD 데드크로스"); }
+    else if (mh > 0) { score += 0.2; }
+    else if (mh < 0) { score -= 0.2; }
   }
-
-  // MA trend: price vs MA20 / MA60
   if (latestInd.ma20 != null && latestInd.ma60 != null) {
     if (latestInd.ma20 > latestInd.ma60 && latestPrice.close > latestInd.ma20) {
-      score += 0.5;
-      reasons.push("상승추세 (MA20>MA60)");
+      score += 0.5; reasons.push("상승추세 (MA20>MA60, 종가>MA20)");
     } else if (latestInd.ma20 < latestInd.ma60 && latestPrice.close < latestInd.ma20) {
-      score -= 0.5;
-      reasons.push("하락추세 (MA20<MA60)");
+      score -= 0.5; reasons.push("하락추세 (MA20<MA60, 종가<MA20)");
     }
   }
+  if (reasons.length === 0) reasons.push("기술적 중립");
+  return { score: Math.round(score * 100) / 100, reasons };
+}
 
-  // --- KB sentiment (range roughly -2..+2) ---
-  let factIds: string[] = [];
-  if (facts.length > 0) {
-    // weighted average sentiment by reliability
-    let num = 0;
-    let den = 0;
-    for (const f of facts) {
-      const s = f.sentiment ?? 0;
-      const w = f.reliability ?? 0.5;
-      num += s * w;
-      den += w;
-    }
-    const weighted = den > 0 ? num / den : 0;
-    const factor = Math.min(facts.length / 3, 1); // need 3+ facts for full weight
-    const contrib = weighted * 2 * factor;
-    score += contrib;
-    factIds = facts.slice(0, 8).map((f) => f.id);
-    if (Math.abs(weighted) >= 0.3 && facts.length >= 2) {
-      reasons.push(
-        `KB 감성 ${weighted >= 0 ? "긍정" : "부정"} ${weighted.toFixed(2)} (${facts.length}건)`,
-      );
-    }
+// KB 감성 점수 (-2 ~ +2) + fact_ids
+export function computeKbScore(facts: FactRow[]): ScoreComponent & { fact_ids: string[] } {
+  if (facts.length === 0) {
+    return { score: 0, reasons: ["관련 KB Fact 없음"], fact_ids: [] };
   }
-
-  // --- Decision ---
-  let kind: SignalKind = "HOLD";
-  if (score >= 1.5) kind = "BUY";
-  else if (score <= -1.5) kind = "SELL";
-
-  if (reasons.length === 0) reasons.push("뚜렷한 시그널 없음 — 관망");
-
+  let num = 0, den = 0;
+  for (const f of facts) {
+    const s = f.sentiment ?? 0;
+    const w = f.reliability ?? 0.5;
+    num += s * w;
+    den += w;
+  }
+  const weighted = den > 0 ? num / den : 0;
+  const factor = Math.min(facts.length / 3, 1);
+  const score = weighted * 2 * factor;
+  const reasons: string[] = [];
+  if (Math.abs(weighted) >= 0.3 && facts.length >= 2) {
+    reasons.push(`KB 감성 ${weighted >= 0 ? "긍정" : "부정"} ${weighted.toFixed(2)} · ${facts.length}건`);
+  } else {
+    reasons.push(`KB 감성 약함 ${weighted.toFixed(2)} · ${facts.length}건`);
+  }
   return {
-    ticker,
-    ts: new Date().toISOString(),
-    kind,
     score: Math.round(score * 100) / 100,
     reasons,
-    rsi14: rsi,
-    macd_hist: mh,
-    fact_ids: factIds,
+    fact_ids: facts.slice(0, 8).map((f) => f.id),
   };
 }
 
-async function loadTickerInputs(ticker: string) {
+function sigmoid(x: number) { return 1 / (1 + Math.exp(-x)); }
+
+async function loadInputs(ticker: string) {
   const t = ticker.toUpperCase();
   const [priceRes, indRes, factRes] = await Promise.all([
     supabaseAdmin
@@ -153,18 +135,14 @@ async function loadTickerInputs(ticker: string) {
       .order("updated_at", { ascending: false })
       .limit(20),
   ]);
-
   if (priceRes.error) throw new Error(priceRes.error.message);
   if (indRes.error) throw new Error(indRes.error.message);
   if (factRes.error) throw new Error(factRes.error.message);
-
   const ind = (indRes.data ?? []) as IndicatorRow[];
-  // facts within 14d
   const cutoff = Date.now() - 14 * 24 * 3600 * 1000;
   const facts = ((factRes.data ?? []) as FactRow[]).filter(
     (f) => new Date(f.updated_at).getTime() >= cutoff,
   );
-
   return {
     latestPrice: (priceRes.data?.[0] as PriceRow | undefined) ?? null,
     latestInd: ind[0] ?? null,
@@ -173,39 +151,89 @@ async function loadTickerInputs(ticker: string) {
   };
 }
 
-export async function generateSignalForTicker(ticker: string) {
+export async function computeSignalForTicker(
+  ticker: string,
+  weights = DEFAULT_WEIGHTS,
+): Promise<SignalRow | null> {
   const t = ticker.toUpperCase();
-  const inputs = await loadTickerInputs(t);
-  const sig = computeSignal({ ticker: t, ...inputs });
-  if (!sig) return { ticker: t, inserted: false, reason: "no price/indicator data" };
+  const inputs = await loadInputs(t);
+  if (!inputs.latestPrice || !inputs.latestInd) return null;
 
+  const tech = computeTechnicalScore({
+    latestPrice: inputs.latestPrice,
+    latestInd: inputs.latestInd,
+    prevInd: inputs.prevInd,
+  });
+  const fund = await computeFundamentalScore(t);
+  const kb = computeKbScore(inputs.facts);
+
+  // weighted total: 각 컴포넌트의 평균 max 범위 ~3,2,2 → 정규화
+  const total =
+    weights.technical * (tech.score / 3) +
+    weights.fundamental * (fund.score / 2) +
+    weights.kb * (kb.score / 2);
+  // total ~ -1 .. +1
+  const score = Math.round(total * 300) / 100; // 다시 -3..+3 스케일로 표시
+
+  let kind: SignalKind = "HOLD";
+  if (score >= 1.2) kind = "BUY";
+  else if (score <= -1.2) kind = "SELL";
+
+  const confidence = Math.round(Math.abs(2 * sigmoid(score) - 1) * 100) / 100; // 0..1
+
+  const reasons = [
+    ...tech.reasons.map((r) => `[기술] ${r}`),
+    ...fund.reasons.map((r) => `[기본] ${r}`),
+    ...kb.reasons.map((r) => `[KB] ${r}`),
+  ];
+
+  return {
+    ticker: t,
+    ts: new Date().toISOString(),
+    kind,
+    score,
+    technical_score: tech.score,
+    fundamental_score: fund.score,
+    kb_score: kb.score,
+    weights,
+    confidence,
+    reasons,
+    rsi14: inputs.latestInd.rsi14,
+    macd_hist: inputs.latestInd.macd_hist,
+    fact_ids: kb.fact_ids,
+  };
+}
+
+export async function generateSignalForTicker(ticker: string) {
+  const sig = await computeSignalForTicker(ticker);
+  if (!sig) return { ticker: ticker.toUpperCase(), inserted: false, reason: "no price/indicator data" };
   const { error } = await (supabaseAdmin.from("signals") as any).insert({
     ticker: sig.ticker,
     ts: sig.ts,
     kind: sig.kind,
     score: sig.score,
+    technical_score: sig.technical_score,
+    fundamental_score: sig.fundamental_score,
+    kb_score: sig.kb_score,
+    weights: sig.weights,
+    confidence: sig.confidence,
     reasons: sig.reasons,
     rsi14: sig.rsi14,
     macd_hist: sig.macd_hist,
     fact_ids: sig.fact_ids,
   });
   if (error) throw new Error(`signals insert: ${error.message}`);
-  return { ticker: t, inserted: true, kind: sig.kind, score: sig.score };
+  return { ticker: sig.ticker, inserted: true, kind: sig.kind, score: sig.score, confidence: sig.confidence };
 }
 
 export async function generateSignalsForAll() {
-  // distinct tickers with prices
-  const { data, error } = await supabaseAdmin
-    .from("prices")
-    .select("ticker")
-    .limit(1000);
+  const { data, error } = await supabaseAdmin.from("prices").select("ticker").limit(1000);
   if (error) throw new Error(error.message);
   const tickers = Array.from(new Set((data ?? []).map((r: any) => r.ticker as string)));
-  const out: { ticker: string; kind?: string; score?: number; reason?: string }[] = [];
+  const out: any[] = [];
   for (const t of tickers) {
     try {
-      const r = await generateSignalForTicker(t);
-      out.push(r as any);
+      out.push(await generateSignalForTicker(t));
     } catch (e: any) {
       out.push({ ticker: t, reason: e?.message ?? String(e) });
     }

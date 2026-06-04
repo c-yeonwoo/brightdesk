@@ -1,263 +1,274 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  Cell,
 } from "recharts";
-import { AlertCircle, Database, FileText, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Briefcase, Sparkles, Activity, TrendingUp, TrendingDown } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
-import { DomainBadge } from "@/components/kb/DomainBadge";
-import { getOverview } from "@/lib/kb.functions";
-import {
-  DOMAIN_LABEL,
-  SOURCE_LABEL,
-  freshnessColor,
-  freshnessLevel,
-  relativeTime,
-} from "@/lib/kb-format";
-import type { KbDomain, SourceType } from "@/lib/kb-client.server";
+import { getLiveDashboard } from "@/lib/dashboard.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "대시보드 · BrightDesk" },
-      { name: "description", content: "지식베이스 · 시그널 · 모의 포트폴리오 통합 대시보드" },
+      { title: "BrightDesk · Live AI Trading Desk" },
+      { name: "description", content: "1,000만원 자체 운용 + KB 인사이트 기반 AI 포트폴리오 재구성" },
     ],
   }),
-  component: OverviewPage,
+  component: DashboardPage,
   errorComponent: ({ error }) => (
     <AppShell>
       <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
-        대시보드 데이터를 불러올 수 없습니다: {error.message}
+        대시보드 로딩 실패: {error.message}
       </div>
     </AppShell>
   ),
 });
 
-function StatCard({
-  label,
-  value,
-  hint,
-  icon: Icon,
-  tone = "default",
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
-  tone?: "default" | "warn" | "success";
-}) {
-  const color =
-    tone === "warn"
-      ? "var(--warning)"
-      : tone === "success"
-      ? "var(--success)"
-      : "var(--primary)";
+function fmtKrw(n: number) {
+  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 }).format(n);
+}
+
+function DashboardPage() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["live-dashboard"],
+    queryFn: () => getLiveDashboard(),
+    refetchInterval: 60_000,
+  });
+
+  return (
+    <AppShell>
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">BrightDesk Live</h1>
+            <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+              자체 운용 1,000만원
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            1시간마다 KB·기술·기본 분석을 종합해 자동 리밸런싱하는 실시간 트레이딩 데스크.
+          </p>
+        </div>
+        <Link
+          to="/my-portfolio"
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground hover:opacity-90"
+        >
+          <Briefcase className="h-3.5 w-3.5" />
+          내 포트폴리오 분석
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+
+      {isLoading || !data ? (
+        <div className="grid gap-3 sm:grid-cols-4">
+          {[0,1,2,3].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl border bg-card" />)}
+        </div>
+      ) : <DashboardContent data={data} />}
+    </AppShell>
+  );
+}
+
+function DashboardContent({ data }: { data: any }) {
+  const s = data.summary;
+  const pnlPositive = s.pnl >= 0;
+
+  return (
+    <>
+      {/* KPIs */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="총자산"
+          value={`${fmtKrw(s.total)}원`}
+          hint={`초기 ${fmtKrw(Number(data.portfolio.initial_cash))}원`}
+          icon={Activity}
+        />
+        <KpiCard
+          label="누적 수익"
+          value={`${pnlPositive ? "+" : ""}${fmtKrw(s.pnl)}원`}
+          hint={`${pnlPositive ? "+" : ""}${s.pnl_pct.toFixed(2)}%`}
+          icon={pnlPositive ? TrendingUp : TrendingDown}
+          tone={pnlPositive ? "success" : "danger"}
+        />
+        <KpiCard
+          label="현금"
+          value={`${fmtKrw(s.cash)}원`}
+          hint={`보유자산 ${fmtKrw(s.holdings)}원`}
+          icon={Activity}
+        />
+        <KpiCard
+          label="보유 종목"
+          value={`${data.positions.length}종`}
+          hint={`24h 거래 ${data.recent_txns.length}건`}
+          icon={Briefcase}
+        />
+      </div>
+
+      {/* Curve + 24h activity */}
+      <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border bg-card p-5 lg:col-span-2">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold">자산 곡선</h2>
+            <span className="text-[11px] text-muted-foreground">{data.curve.length}일 스냅샷</span>
+          </div>
+          <div className="h-64">
+            {data.curve.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                스냅샷이 아직 없습니다. 1시간 cron이 첫 실행되면 데이터가 누적됩니다.
+              </div>
+            ) : (
+              <ResponsiveContainer>
+                <AreaChart data={data.curve}>
+                  <defs>
+                    <linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} stroke="var(--border)" />
+                  <YAxis
+                    tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`}
+                    tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                    stroke="var(--border)"
+                    domain={["auto", "auto"]}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+                    formatter={(v: number) => `${fmtKrw(v)}원`}
+                  />
+                  <Area type="monotone" dataKey="total_value" stroke="var(--primary)" fill="url(#totalGrad)" strokeWidth={2} name="총자산" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-card p-5">
+          <h2 className="mb-3 text-sm font-semibold">24h 활동</h2>
+          <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">시그널</div>
+              <div className="text-lg font-semibold tabular-nums">{data.recent_signals.length}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매수</div>
+              <div className="text-lg font-semibold tabular-nums text-success">
+                {data.recent_txns.filter((t: any) => t.side === "BUY").length}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매도</div>
+              <div className="text-lg font-semibold tabular-nums text-danger" style={{ color: "var(--danger)" }}>
+                {data.recent_txns.filter((t: any) => t.side === "SELL").length}
+              </div>
+            </div>
+          </div>
+          <ul className="space-y-1.5 text-xs">
+            {data.recent_txns.slice(0, 6).map((t: any) => (
+              <li key={t.id} className="flex items-center justify-between border-t pt-1.5">
+                <span className="font-medium">{t.ticker}</span>
+                <span style={{ color: t.side === "BUY" ? "var(--success)" : "var(--danger)" }}>
+                  {t.side} {Number(t.qty)}주
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {new Date(t.executed_at).toLocaleDateString()}
+                </span>
+              </li>
+            ))}
+            {data.recent_txns.length === 0 && (
+              <li className="text-center text-muted-foreground">24h 거래 없음</li>
+            )}
+          </ul>
+        </div>
+      </div>
+
+      {/* Positions + KB highlights */}
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border bg-card p-5">
+          <h2 className="mb-3 text-sm font-semibold">현재 보유 ({data.positions.length})</h2>
+          {data.positions.length === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">아직 보유 종목 없음</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr><th className="text-left">종목</th><th className="text-right">수량</th><th className="text-right">평가</th><th className="text-right">손익</th></tr>
+              </thead>
+              <tbody>
+                {data.positions.map((p: any) => (
+                  <tr key={p.id} className="border-t">
+                    <td className="py-1.5 font-medium">{p.ticker}</td>
+                    <td className="py-1.5 text-right tabular-nums">{Number(p.qty)}</td>
+                    <td className="py-1.5 text-right tabular-nums">{fmtKrw(p.market_value)}</td>
+                    <td
+                      className="py-1.5 text-right tabular-nums"
+                      style={{ color: (p.pl ?? 0) >= 0 ? "var(--success)" : "var(--danger)" }}
+                    >
+                      {p.pl_pct != null ? `${p.pl_pct >= 0 ? "+" : ""}${p.pl_pct.toFixed(2)}%` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="rounded-xl border bg-card p-5">
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            KB 최신 인사이트
+          </h2>
+          <ul className="space-y-2">
+            {data.recent_facts.slice(0, 6).map((f: any) => {
+              const senti = f.sentiment != null ? Number(f.sentiment) : null;
+              const color = senti == null ? "var(--muted-foreground)" : senti > 0.1 ? "var(--success)" : senti < -0.1 ? "var(--danger)" : "var(--muted-foreground)";
+              return (
+                <li key={f.id} className="border-t pt-2 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-medium">{f.title}</span>
+                    {senti != null && (
+                      <span className="shrink-0 tabular-nums" style={{ color }}>
+                        {senti >= 0 ? "+" : ""}{senti.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  {f.related_tickers && f.related_tickers.length > 0 && (
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                      {f.related_tickers.slice(0, 5).join(" · ")}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+            {data.recent_facts.length === 0 && (
+              <li className="text-center text-muted-foreground">최신 인사이트 없음</li>
+            )}
+          </ul>
+          <Link to="/insights" className="mt-3 inline-block text-xs text-primary hover:underline">
+            전체 인사이트 보기 →
+          </Link>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function KpiCard({ label, value, hint, icon: Icon, tone = "default" }: any) {
+  const color = tone === "success" ? "var(--success)" : tone === "danger" ? "var(--danger)" : "var(--primary)";
   return (
     <div className="rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
         <Icon className="h-4 w-4" style={{ color }} />
       </div>
-      <div className="mt-2 text-2xl font-semibold tabular-nums" style={{ color }}>
-        {value}
-      </div>
+      <div className="mt-2 text-xl font-semibold tabular-nums" style={{ color }}>{value}</div>
       {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}
     </div>
-  );
-}
-
-function OverviewPage() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["overview"],
-    queryFn: () => getOverview(),
-  });
-
-  return (
-    <AppShell>
-      <div className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">대시보드</h1>
-          <p className="text-sm text-muted-foreground">
-            지식베이스 현황, 시그널, 포트폴리오를 한눈에 확인하세요.
-          </p>
-        </div>
-        <a
-          href="/actions"
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
-        >
-          오늘의 액션 보기 →
-        </a>
-      </div>
-
-      {isLoading || !data ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-xl border bg-card" />
-          ))}
-        </div>
-      ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              label="활성 Fact"
-              value={data.activeFacts.toLocaleString()}
-              hint={`전체 ${data.totalFacts.toLocaleString()}개 중`}
-              icon={Database}
-              tone="success"
-            />
-            <StatCard
-              label="비활성 Fact"
-              value={(data.totalFacts - data.activeFacts).toLocaleString()}
-              hint={`활성 비율 ${data.totalFacts > 0 ? Math.round((data.activeFacts / data.totalFacts) * 100) : 0}%`}
-              icon={CheckCircle2}
-            />
-            <StatCard
-              label="원본 문서"
-              value={data.totalDocs.toLocaleString()}
-              hint="raw_documents 총량"
-              icon={FileText}
-            />
-            <StatCard
-              label="미처리 원본"
-              value={data.unprocessedCount.toLocaleString()}
-              hint="processed_at = NULL"
-              icon={AlertCircle}
-              tone={data.unprocessedCount > 0 ? "warn" : "success"}
-            />
-          </div>
-
-          <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2 rounded-xl border bg-card p-5">
-              <div className="mb-3 flex items-baseline justify-between">
-                <h2 className="text-sm font-semibold">소스별 문서 수 · 평균 신뢰도</h2>
-                <span className="text-xs text-muted-foreground">raw_documents</span>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer>
-                  <BarChart data={data.bySource}>
-                    <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="source"
-                      tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                      tickFormatter={(s) => SOURCE_LABEL[s as SourceType] ?? s}
-                      stroke="var(--border)"
-                    />
-                    <YAxis
-                      yAxisId="l"
-                      tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                      stroke="var(--border)"
-                    />
-                    <YAxis
-                      yAxisId="r"
-                      orientation="right"
-                      domain={[0, 1]}
-                      tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                      stroke="var(--border)"
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 8,
-                        fontSize: 12,
-                      }}
-                      formatter={(v: number, name) =>
-                        name === "avgReliability" ? v.toFixed(2) : v
-                      }
-                      labelFormatter={(s) => SOURCE_LABEL[s as SourceType] ?? s}
-                    />
-                    <Bar yAxisId="l" dataKey="count" fill="var(--chart-1)" radius={[4, 4, 0, 0]} name="문서 수" />
-                    <Bar
-                      yAxisId="r"
-                      dataKey="avgReliability"
-                      fill="var(--chart-2)"
-                      radius={[4, 4, 0, 0]}
-                      name="평균 신뢰도"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="rounded-xl border bg-card p-5">
-              <h2 className="mb-3 text-sm font-semibold">분야별 신선도 · 신호등</h2>
-              <div className="space-y-3">
-                {data.byDomain.map((d) => {
-                  const level = freshnessLevel(d.lastUpdated);
-                  const color = freshnessColor(level);
-                  return (
-                    <div key={d.domain} className="flex items-center gap-3">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{
-                          background: color,
-                          boxShadow: `0 0 0 3px color-mix(in oklab, ${color} 20%, transparent)`,
-                        }}
-                      />
-                      <DomainBadge domain={d.domain as KbDomain} />
-                      <div className="ml-auto text-right">
-                        <div className="text-xs tabular-nums">
-                          <span className="font-medium text-foreground">{d.active}</span>
-                          <span className="text-muted-foreground">/{d.total}</span>
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">
-                          {relativeTime(d.lastUpdated)}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="mt-4 border-t pt-3 text-[11px] text-muted-foreground">
-                초록 ≤ 24h · 노랑 ≤ 72h · 빨강 &gt; 72h
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-xl border bg-card p-5">
-            <h2 className="mb-3 text-sm font-semibold">분야별 활성 / 비활성</h2>
-            <div className="h-56">
-              <ResponsiveContainer>
-                <BarChart
-                  data={data.byDomain.map((d) => ({
-                    name: DOMAIN_LABEL[d.domain as KbDomain],
-                    domain: d.domain,
-                    활성: d.active,
-                    비활성: d.inactive,
-                  }))}
-                  layout="vertical"
-                  stackOffset="expand"
-                >
-                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" tickFormatter={(v) => `${Math.round(v * 100)}%`} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-                  <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} stroke="var(--border)" />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar dataKey="활성" stackId="a" fill="var(--success)">
-                    {data.byDomain.map((d, i) => (
-                      <Cell key={i} fill={`var(--domain-${d.domain})`} />
-                    ))}
-                  </Bar>
-                  <Bar dataKey="비활성" stackId="a" fill="var(--muted)" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </>
-      )}
-    </AppShell>
   );
 }

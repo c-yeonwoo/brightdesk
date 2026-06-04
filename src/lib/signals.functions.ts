@@ -30,7 +30,7 @@ export const listSignals = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     let q = supabaseAdmin
       .from("signals")
-      .select("id,ticker,ts,kind,score,reasons,rsi14,macd_hist,fact_ids")
+      .select("id,ticker,ts,kind,score,reasons,rsi14,macd_hist,fact_ids,technical_score,fundamental_score,kb_score,confidence,weights")
       .order("ts", { ascending: false })
       .limit(data.limit ?? 100);
     if (data.ticker) q = q.eq("ticker", data.ticker.toUpperCase());
@@ -41,10 +41,9 @@ export const listSignals = createServerFn({ method: "GET" })
 
 export const getLatestSignalPerTicker = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  // get up to 500 recent signals then dedupe per ticker client-side (simple)
   const { data, error } = await supabaseAdmin
     .from("signals")
-    .select("id,ticker,ts,kind,score,reasons,rsi14,macd_hist,fact_ids")
+    .select("id,ticker,ts,kind,score,reasons,rsi14,macd_hist,fact_ids,technical_score,fundamental_score,kb_score,confidence,weights")
     .order("ts", { ascending: false })
     .limit(500);
   if (error) throw new Error(error.message);
