@@ -9,8 +9,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowRight, Briefcase, Sparkles, Activity, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowRight, Briefcase, Sparkles, Activity, TrendingUp, TrendingDown, Target } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
+import { TradeLedger } from "@/components/kb/TradeLedger";
 import { getLiveDashboard } from "@/lib/dashboard.functions";
 
 export const Route = createFileRoute("/")({
@@ -82,7 +83,7 @@ function DashboardContent({ data }: { data: any }) {
   return (
     <>
       {/* KPIs */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
           label="총자산"
           value={`${fmtKrw(s.total)}원`}
@@ -97,18 +98,40 @@ function DashboardContent({ data }: { data: any }) {
           tone={pnlPositive ? "success" : "danger"}
         />
         <KpiCard
-          label="현금"
-          value={`${fmtKrw(s.cash)}원`}
-          hint={`보유자산 ${fmtKrw(s.holdings)}원`}
-          icon={Activity}
+          label="BUY 승률"
+          value={
+            data.winrate.buy.winrate != null
+              ? `${(data.winrate.buy.winrate * 100).toFixed(1)}%`
+              : "—"
+          }
+          hint={`표본 ${data.winrate.buy.n}건 · 5d 평균 ${
+            data.winrate.buy.avg_ret_5d != null
+              ? `${(data.winrate.buy.avg_ret_5d * 100).toFixed(2)}%`
+              : "—"
+          }`}
+          icon={Target}
+          tone={
+            data.winrate.buy.winrate != null && data.winrate.buy.winrate >= 0.5 ? "success" : "default"
+          }
         />
         <KpiCard
-          label="보유 종목"
+          label="SELL 승률"
+          value={
+            data.winrate.sell.winrate != null
+              ? `${(data.winrate.sell.winrate * 100).toFixed(1)}%`
+              : "—"
+          }
+          hint={`표본 ${data.winrate.sell.n}건 · 회피 적중`}
+          icon={Target}
+        />
+        <KpiCard
+          label="보유 / 7d 거래"
           value={`${data.positions.length}종`}
-          hint={`24h 거래 ${data.recent_txns.length}건`}
+          hint={`최근 7일 ${data.txns_7d_count}건 체결`}
           icon={Briefcase}
         />
       </div>
+
 
       {/* Curve + 24h activity */}
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
@@ -159,35 +182,29 @@ function DashboardContent({ data }: { data: any }) {
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매수</div>
-              <div className="text-lg font-semibold tabular-nums text-success">
-                {data.recent_txns.filter((t: any) => t.side === "BUY").length}
+              <div className="text-lg font-semibold tabular-nums" style={{ color: "var(--success)" }}>
+                {data.trade_ledger.filter((t: any) => t.side === "BUY" && t.executed_at >= new Date(Date.now() - 86400000).toISOString()).length}
               </div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매도</div>
-              <div className="text-lg font-semibold tabular-nums text-danger" style={{ color: "var(--danger)" }}>
-                {data.recent_txns.filter((t: any) => t.side === "SELL").length}
+              <div className="text-lg font-semibold tabular-nums" style={{ color: "var(--danger)" }}>
+                {data.trade_ledger.filter((t: any) => t.side === "SELL" && t.executed_at >= new Date(Date.now() - 86400000).toISOString()).length}
               </div>
             </div>
           </div>
-          <ul className="space-y-1.5 text-xs">
-            {data.recent_txns.slice(0, 6).map((t: any) => (
-              <li key={t.id} className="flex items-center justify-between border-t pt-1.5">
-                <span className="font-medium">{t.ticker}</span>
-                <span style={{ color: t.side === "BUY" ? "var(--success)" : "var(--danger)" }}>
-                  {t.side} {Number(t.qty)}주
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {new Date(t.executed_at).toLocaleDateString()}
-                </span>
-              </li>
-            ))}
-            {data.recent_txns.length === 0 && (
-              <li className="text-center text-muted-foreground">24h 거래 없음</li>
-            )}
-          </ul>
+          <div className="rounded-md border-t pt-3 text-[11px] text-muted-foreground">
+            <p>매 1시간 cron이 신뢰도 ≥ 임계치 시그널만 자동 체결. 모든 거래는 근거 시그널과 영구 결합됩니다.</p>
+          </div>
         </div>
       </div>
+
+      {/* 거래 원장 (근거 첨부) */}
+      <div className="mt-6">
+        <TradeLedger trades={data.trade_ledger.slice(0, 12)} />
+      </div>
+
+
 
       {/* Positions + KB highlights */}
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
