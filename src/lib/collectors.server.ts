@@ -155,7 +155,7 @@ export async function runCollection(): Promise<{
         body: d.body,
         reliability: d.reliability,
         published_at: d.published_at,
-        meta: d.meta ?? {},
+        meta: (d.meta ?? {}) as any,
       });
       if (error) {
         console.error(`[collector:${c.source}] insert error`, error.message);
