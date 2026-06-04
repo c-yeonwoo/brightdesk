@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TickersRouteImport } from './routes/tickers'
 import { Route as SignalsRouteImport } from './routes/signals'
+import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as FactsRouteImport } from './routes/facts'
 import { Route as DocumentsRouteImport } from './routes/documents'
@@ -25,6 +26,11 @@ const TickersRoute = TickersRouteImport.update({
 const SignalsRoute = SignalsRouteImport.update({
   id: '/signals',
   path: '/signals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortfolioRoute = PortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PipelineRoute = PipelineRouteImport.update({
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
   '/pipeline': typeof PipelineRoute
+  '/portfolio': typeof PortfolioRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
   '/pipeline': typeof PipelineRoute
+  '/portfolio': typeof PortfolioRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
   '/pipeline': typeof PipelineRoute
+  '/portfolio': typeof PortfolioRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/facts'
     | '/pipeline'
+    | '/portfolio'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/facts'
     | '/pipeline'
+    | '/portfolio'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/facts'
     | '/pipeline'
+    | '/portfolio'
     | '/signals'
     | '/tickers'
     | '/api/public/cron/collect'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   DocumentsRoute: typeof DocumentsRoute
   FactsRoute: typeof FactsRoute
   PipelineRoute: typeof PipelineRoute
+  PortfolioRoute: typeof PortfolioRoute
   SignalsRoute: typeof SignalsRoute
   TickersRoute: typeof TickersRoute
   ApiPublicCronCollectRoute: typeof ApiPublicCronCollectRoute
@@ -135,6 +148,13 @@ declare module '@tanstack/react-router' {
       path: '/signals'
       fullPath: '/signals'
       preLoaderRoute: typeof SignalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portfolio': {
+      id: '/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pipeline': {
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocumentsRoute: DocumentsRoute,
   FactsRoute: FactsRoute,
   PipelineRoute: PipelineRoute,
+  PortfolioRoute: PortfolioRoute,
   SignalsRoute: SignalsRoute,
   TickersRoute: TickersRoute,
   ApiPublicCronCollectRoute: ApiPublicCronCollectRoute,
@@ -187,3 +208,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
