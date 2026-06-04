@@ -83,7 +83,7 @@ function DashboardContent({ data }: { data: any }) {
   return (
     <>
       {/* KPIs */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
           label="총자산"
           value={`${fmtKrw(s.total)}원`}
@@ -98,18 +98,40 @@ function DashboardContent({ data }: { data: any }) {
           tone={pnlPositive ? "success" : "danger"}
         />
         <KpiCard
-          label="현금"
-          value={`${fmtKrw(s.cash)}원`}
-          hint={`보유자산 ${fmtKrw(s.holdings)}원`}
-          icon={Activity}
+          label="BUY 승률"
+          value={
+            data.winrate.buy.winrate != null
+              ? `${(data.winrate.buy.winrate * 100).toFixed(1)}%`
+              : "—"
+          }
+          hint={`표본 ${data.winrate.buy.n}건 · 5d 평균 ${
+            data.winrate.buy.avg_ret_5d != null
+              ? `${(data.winrate.buy.avg_ret_5d * 100).toFixed(2)}%`
+              : "—"
+          }`}
+          icon={Target}
+          tone={
+            data.winrate.buy.winrate != null && data.winrate.buy.winrate >= 0.5 ? "success" : "default"
+          }
         />
         <KpiCard
-          label="보유 종목"
+          label="SELL 승률"
+          value={
+            data.winrate.sell.winrate != null
+              ? `${(data.winrate.sell.winrate * 100).toFixed(1)}%`
+              : "—"
+          }
+          hint={`표본 ${data.winrate.sell.n}건 · 회피 적중`}
+          icon={Target}
+        />
+        <KpiCard
+          label="보유 / 7d 거래"
           value={`${data.positions.length}종`}
-          hint={`24h 거래 ${data.recent_txns.length}건`}
+          hint={`최근 7일 ${data.txns_7d_count}건 체결`}
           icon={Briefcase}
         />
       </div>
+
 
       {/* Curve + 24h activity */}
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
