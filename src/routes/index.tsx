@@ -9,8 +9,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowRight, Briefcase, Sparkles, Activity, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowRight, Briefcase, Sparkles, Activity, TrendingUp, TrendingDown, Target } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
+import { TradeLedger } from "@/components/kb/TradeLedger";
 import { getLiveDashboard } from "@/lib/dashboard.functions";
 
 export const Route = createFileRoute("/")({
