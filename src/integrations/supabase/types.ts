@@ -101,6 +101,106 @@ export type Database = {
         }
         Relationships: []
       }
+      portfolio_snapshots: {
+        Row: {
+          cash: number
+          created_at: string
+          date: string
+          holdings_value: number
+          id: string
+          portfolio_id: string
+          total_value: number
+        }
+        Insert: {
+          cash: number
+          created_at?: string
+          date: string
+          holdings_value: number
+          id?: string
+          portfolio_id: string
+          total_value: number
+        }
+        Update: {
+          cash?: number
+          created_at?: string
+          date?: string
+          holdings_value?: number
+          id?: string
+          portfolio_id?: string
+          total_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_snapshots_portfolio_id_fkey"
+            columns: ["portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolios: {
+        Row: {
+          cash: number
+          created_at: string
+          id: string
+          initial_cash: number
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          cash?: number
+          created_at?: string
+          id?: string
+          initial_cash?: number
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          cash?: number
+          created_at?: string
+          id?: string
+          initial_cash?: number
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      positions: {
+        Row: {
+          avg_price: number
+          id: string
+          portfolio_id: string
+          qty: number
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          avg_price?: number
+          id?: string
+          portfolio_id: string
+          qty?: number
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          avg_price?: number
+          id?: string
+          portfolio_id?: string
+          qty?: number
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "positions_portfolio_id_fkey"
+            columns: ["portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prices: {
         Row: {
           close: number
@@ -185,6 +285,42 @@ export type Database = {
         }
         Relationships: []
       }
+      scenarios: {
+        Row: {
+          created_at: string
+          id: string
+          mdd: number | null
+          name: string
+          params: Json
+          ran_at: string | null
+          score: number | null
+          sharpe: number | null
+          total_return: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mdd?: number | null
+          name: string
+          params?: Json
+          ran_at?: string | null
+          score?: number | null
+          sharpe?: number | null
+          total_return?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mdd?: number | null
+          name?: string
+          params?: Json
+          ran_at?: string | null
+          score?: number | null
+          sharpe?: number | null
+          total_return?: number | null
+        }
+        Relationships: []
+      }
       signals: {
         Row: {
           created_at: string
@@ -224,6 +360,56 @@ export type Database = {
         }
         Relationships: []
       }
+      transactions: {
+        Row: {
+          executed_at: string
+          fee: number
+          id: string
+          note: string | null
+          portfolio_id: string
+          price: number
+          qty: number
+          side: Database["public"]["Enums"]["txn_side"]
+          signal_id: string | null
+          tax: number
+          ticker: string
+        }
+        Insert: {
+          executed_at?: string
+          fee?: number
+          id?: string
+          note?: string | null
+          portfolio_id: string
+          price: number
+          qty: number
+          side: Database["public"]["Enums"]["txn_side"]
+          signal_id?: string | null
+          tax?: number
+          ticker: string
+        }
+        Update: {
+          executed_at?: string
+          fee?: number
+          id?: string
+          note?: string | null
+          portfolio_id?: string
+          price?: number
+          qty?: number
+          side?: Database["public"]["Enums"]["txn_side"]
+          signal_id?: string | null
+          tax?: number
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_portfolio_id_fkey"
+            columns: ["portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -235,6 +421,7 @@ export type Database = {
       kb_domain: "macro" | "theme" | "news" | "politics"
       signal_kind: "BUY" | "SELL" | "HOLD"
       source_type: "broker_pdf" | "mijueun_youtube" | "snoomi_kakao" | "news"
+      txn_side: "BUY" | "SELL"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -365,6 +552,7 @@ export const Constants = {
       kb_domain: ["macro", "theme", "news", "politics"],
       signal_kind: ["BUY", "SELL", "HOLD"],
       source_type: ["broker_pdf", "mijueun_youtube", "snoomi_kakao", "news"],
+      txn_side: ["BUY", "SELL"],
     },
   },
 } as const
