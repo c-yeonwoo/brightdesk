@@ -85,9 +85,15 @@ function OverviewPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">대시보드</h1>
           <p className="text-sm text-muted-foreground">
-            지식베이스 현황과 데이터 신선도를 한눈에 확인하세요.
+            지식베이스 현황, 시그널, 포트폴리오를 한눈에 확인하세요.
           </p>
         </div>
+        <a
+          href="/actions"
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+        >
+          오늘의 액션 보기 →
+        </a>
       </div>
 
       {isLoading || !data ? (
