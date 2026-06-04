@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      indicators: {
+        Row: {
+          computed_at: string
+          date: string
+          id: string
+          ma120: number | null
+          ma20: number | null
+          ma60: number | null
+          macd: number | null
+          macd_hist: number | null
+          macd_signal: number | null
+          rsi14: number | null
+          ticker: string
+        }
+        Insert: {
+          computed_at?: string
+          date: string
+          id?: string
+          ma120?: number | null
+          ma20?: number | null
+          ma60?: number | null
+          macd?: number | null
+          macd_hist?: number | null
+          macd_signal?: number | null
+          rsi14?: number | null
+          ticker: string
+        }
+        Update: {
+          computed_at?: string
+          date?: string
+          id?: string
+          ma120?: number | null
+          ma20?: number | null
+          ma60?: number | null
+          macd?: number | null
+          macd_hist?: number | null
+          macd_signal?: number | null
+          rsi14?: number | null
+          ticker?: string
+        }
+        Relationships: []
+      }
       kb_facts: {
         Row: {
           domain: Database["public"]["Enums"]["kb_domain"]
@@ -56,6 +98,45 @@ export type Database = {
           summary?: string | null
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      prices: {
+        Row: {
+          close: number
+          date: string
+          high: number
+          id: string
+          inserted_at: string
+          low: number
+          open: number
+          source: string
+          ticker: string
+          volume: number
+        }
+        Insert: {
+          close: number
+          date: string
+          high: number
+          id?: string
+          inserted_at?: string
+          low: number
+          open: number
+          source?: string
+          ticker: string
+          volume?: number
+        }
+        Update: {
+          close?: number
+          date?: string
+          high?: number
+          id?: string
+          inserted_at?: string
+          low?: number
+          open?: number
+          source?: string
+          ticker?: string
+          volume?: number
         }
         Relationships: []
       }

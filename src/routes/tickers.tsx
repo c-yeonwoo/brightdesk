@@ -7,6 +7,7 @@ import { AppShell } from "@/components/kb/AppShell";
 import { DomainBadge } from "@/components/kb/DomainBadge";
 import { SentimentGauge } from "@/components/kb/SentimentGauge";
 import { ReliabilityBar } from "@/components/kb/ReliabilityBar";
+import { TickerChart } from "@/components/kb/TickerChart";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -132,6 +133,7 @@ function TickerPage() {
               총 {facts.length}건의 관련 fact
             </span>
           </div>
+          <TickerChart ticker={ticker} />
           <div className="grid gap-4 lg:grid-cols-2">
             {DOMAINS.map((d) => {
               const items = grouped[d] ?? [];
