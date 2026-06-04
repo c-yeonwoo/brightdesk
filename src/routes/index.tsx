@@ -204,7 +204,7 @@ function DashboardContent({ data }: { data: any }) {
         <TradeLedger trades={data.trade_ledger.slice(0, 12)} />
       </div>
 
-      </div>
+
 
       {/* Positions + KB highlights */}
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
