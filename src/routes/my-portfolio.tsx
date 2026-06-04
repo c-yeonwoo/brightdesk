@@ -41,12 +41,14 @@ function MyPortfolioPage() {
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvText, setCsvText] = useState("");
 
-  // Hydrate from saved
+  // Hydrate from saved (once)
   const savedHoldings = saved?.holdings ?? [];
-  const initialized = rows.length === 1 && !rows[0].ticker && savedHoldings.length > 0;
-  if (initialized) {
-    setRows(savedHoldings.map((h: any) => ({ ticker: h.ticker, qty: String(h.qty), avg_price: h.avg_price ? String(h.avg_price) : "" })));
-  }
+  useEffect(() => {
+    if (savedHoldings.length > 0 && rows.length === 1 && !rows[0].ticker) {
+      setRows(savedHoldings.map((h: any) => ({ ticker: h.ticker, qty: String(h.qty), avg_price: h.avg_price ? String(h.avg_price) : "" })));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved]);
 
   const setRow = (i: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
