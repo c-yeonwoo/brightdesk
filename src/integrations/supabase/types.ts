@@ -185,6 +185,45 @@ export type Database = {
         }
         Relationships: []
       }
+      signals: {
+        Row: {
+          created_at: string
+          fact_ids: string[] | null
+          id: string
+          kind: Database["public"]["Enums"]["signal_kind"]
+          macd_hist: number | null
+          reasons: Json
+          rsi14: number | null
+          score: number
+          ticker: string
+          ts: string
+        }
+        Insert: {
+          created_at?: string
+          fact_ids?: string[] | null
+          id?: string
+          kind: Database["public"]["Enums"]["signal_kind"]
+          macd_hist?: number | null
+          reasons?: Json
+          rsi14?: number | null
+          score?: number
+          ticker: string
+          ts?: string
+        }
+        Update: {
+          created_at?: string
+          fact_ids?: string[] | null
+          id?: string
+          kind?: Database["public"]["Enums"]["signal_kind"]
+          macd_hist?: number | null
+          reasons?: Json
+          rsi14?: number | null
+          score?: number
+          ticker?: string
+          ts?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -194,6 +233,7 @@ export type Database = {
     }
     Enums: {
       kb_domain: "macro" | "theme" | "news" | "politics"
+      signal_kind: "BUY" | "SELL" | "HOLD"
       source_type: "broker_pdf" | "mijueun_youtube" | "snoomi_kakao" | "news"
     }
     CompositeTypes: {
@@ -323,6 +363,7 @@ export const Constants = {
   public: {
     Enums: {
       kb_domain: ["macro", "theme", "news", "politics"],
+      signal_kind: ["BUY", "SELL", "HOLD"],
       source_type: ["broker_pdf", "mijueun_youtube", "snoomi_kakao", "news"],
     },
   },

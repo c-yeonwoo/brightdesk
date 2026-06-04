@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Database, FileText, LineChart, Workflow } from "lucide-react";
+import { Activity, Database, FileText, LineChart, Workflow, Zap } from "lucide-react";
 import type { ReactNode } from "react";
 
 const nav = [
@@ -7,6 +7,7 @@ const nav = [
   { to: "/facts", label: "KB Facts", icon: Database },
   { to: "/documents", label: "원본 문서", icon: FileText },
   { to: "/tickers", label: "종목별 뷰", icon: LineChart },
+  { to: "/signals", label: "시그널", icon: Zap },
   { to: "/pipeline", label: "파이프라인", icon: Workflow },
 ] as const;
 
