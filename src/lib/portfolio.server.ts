@@ -166,7 +166,11 @@ export async function executeSignal(opts: {
   return { side: "SELL", qty, price, fee, tax, net };
 }
 
-export async function applyAllRecentSignals(portfolioId: string, hours = 24) {
+export async function applyAllRecentSignals(
+  portfolioId: string,
+  hours = 24,
+  opts: { blockBuys?: boolean; confidenceMultiplier?: number; minConfidence?: number } = {},
+) {
   const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
   const { data: sigs } = await supabaseAdmin
     .from("signals")
@@ -176,8 +180,23 @@ export async function applyAllRecentSignals(portfolioId: string, hours = 24) {
     .order("ts", { ascending: true });
   if (!sigs) return { applied: 0 };
 
+  const mult = opts.confidenceMultiplier ?? 1;
+  const minConf = opts.minConfidence ?? 0.5;
   const results: any[] = [];
+  const skipped: any[] = [];
+
   for (const s of sigs as any[]) {
+    // 레짐 BEAR → 신규 BUY 차단 (SELL/REDUCE는 통과)
+    if (opts.blockBuys && s.kind === "BUY") {
+      skipped.push({ ticker: s.ticker, reason: "regime_bear_block_buy" });
+      continue;
+    }
+    // 신뢰도 게이트 (레짐으로 보정)
+    const adjConf = (Number(s.confidence ?? 0)) * mult;
+    if (s.kind === "BUY" && adjConf < minConf) {
+      skipped.push({ ticker: s.ticker, reason: `low_confidence(${adjConf.toFixed(2)})` });
+      continue;
+    }
     const r = await executeSignal({
       portfolioId,
       ticker: s.ticker,
@@ -185,11 +204,13 @@ export async function applyAllRecentSignals(portfolioId: string, hours = 24) {
       signalDate: s.ts,
       signalId: s.id,
       allocationKrw: 1500000, // 15% per BUY
+      note: s.kind === "SELL" ? "sell_reason:SIGNAL" : undefined,
     });
-    results.push({ ticker: s.ticker, kind: s.kind, ...r });
+    results.push({ ticker: s.ticker, kind: s.kind, conf: adjConf, ...r });
   }
-  return { applied: results.length, results };
+  return { applied: results.length, skipped: skipped.length, results, skipped_details: skipped };
 }
+
 
 export async function snapshotPortfolio(portfolioId: string) {
   const sb = supabaseAdmin;
