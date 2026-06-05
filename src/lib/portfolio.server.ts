@@ -1,7 +1,10 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { isUsTicker, getUsdKrwSpot, getUsdKrwOn } from "./fx.server";
 
 export const FEE_RATE = 0.00015; // 0.015%
 export const TAX_RATE = 0.0018; // 0.18% sell-only (KR)
+// 미국 주식 거래수수료(국내 증권사 일반 수준): 0.25%
+export const US_FEE_RATE = 0.0025;
 
 export async function getOrCreateDefaultPortfolio() {
   return getOrCreateSystemPortfolio();
