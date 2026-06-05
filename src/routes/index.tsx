@@ -151,7 +151,11 @@ function DashboardContent({ data }: { data: any }) {
             {data.curve.length === 0 ? (
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                 스냅샷이 아직 없습니다. 1시간 cron이 첫 실행되면 데이터가 누적됩니다.
-              </div>
+      </div>
+
+      {/* 오늘의 액션 */}
+      <TodaysActions exitAlerts={data.exit_alerts ?? []} recentSignals={data.recent_signals ?? []} />
+
             ) : (
               <ResponsiveContainer>
                 <AreaChart data={data.curve}>
