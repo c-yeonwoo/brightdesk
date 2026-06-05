@@ -128,7 +128,3 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
     exit_alerts: exitChecks.filter((e) => e.triggered),
   };
 });
-
-    winrate: { buy: buyWR, sell: sellWR },
-  };
-});
