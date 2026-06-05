@@ -131,6 +131,21 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
                     >
                       {t.side}
                     </span>
+                    {reasonStyle && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                        style={{
+                          background: `color-mix(in oklab, ${reasonStyle.color} 14%, transparent)`,
+                          color: reasonStyle.color,
+                        }}
+                      >
+                        <reasonStyle.Icon className="h-2.5 w-2.5" />
+                        {reasonStyle.label}
+                      </span>
+                    )}
+                    {/* placeholder to preserve original closing */}
+                    <span className="hidden">
+
                     {confPct != null && (
                       <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                         신뢰도 {confPct.toFixed(0)}%
