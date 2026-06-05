@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { computeSignalForTicker } from "./signals.server";
 import { getWinrate } from "./outcomes.server";
+import { isUsTicker, getUsdKrwSpot } from "./fx.server";
 
 export interface RecAction {
   action: "BUY" | "SELL" | "HOLD" | "REDUCE" | "ADD";
@@ -40,12 +41,21 @@ export async function generateRecommendation(opts: {
 }) {
   const holdings = opts.holdings.filter((h) => h.qty > 0);
 
-  // 현재 보유 평가
-  const holdingValues: { ticker: string; qty: number; price: number; value: number }[] = [];
+  // 현재 보유 평가 — 모든 가치는 KRW 기준으로 환산
+  const fx = await getUsdKrwSpot();
+  const holdingValues: { ticker: string; qty: number; price: number; value: number; currency: "USD" | "KRW" }[] = [];
   for (const h of holdings) {
     const price = await getLatestPrice(h.ticker);
     if (price == null) continue;
-    holdingValues.push({ ticker: h.ticker.toUpperCase(), qty: h.qty, price, value: h.qty * price });
+    const us = isUsTicker(h.ticker);
+    const priceKrw = us ? price * fx : price;
+    holdingValues.push({
+      ticker: h.ticker.toUpperCase(),
+      qty: h.qty,
+      price,
+      value: h.qty * priceKrw,
+      currency: us ? "USD" : "KRW",
+    });
   }
   const totalValue = holdingValues.reduce((s, h) => s + h.value, 0);
 
