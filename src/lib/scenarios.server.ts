@@ -227,3 +227,89 @@ export async function listScenarios() {
     .order("score", { ascending: false });
   return data ?? [];
 }
+
+/**
+ * 특정 시나리오 파라미터로 다시 시뮬레이션 + 일자별 자산곡선 + 벤치마크(KOSPI 정규화) 동봉
+ */
+export async function simulateScenarioCurve(
+  params: ScenarioParams,
+  tickers: string[] = DEFAULT_TICKERS,
+  days = 180,
+  initial = 10_000_000,
+) {
+  const history: Record<string, DailyRow[]> = {};
+  for (const t of tickers) history[t] = await loadHistory(t, days);
+
+  // 재구성: simulate를 변형하여 일자/equity 페어 반환
+  let cash = initial;
+  const pos: Record<string, { qty: number; avg: number }> = {};
+  const ts = Object.keys(history);
+  const dateSet = new Set<string>();
+  for (const t of ts) history[t].forEach((d) => dateSet.add(d.date));
+  const dates = Array.from(dateSet).sort();
+  const curve: { date: string; equity: number }[] = [];
+
+  for (let di = 0; di < dates.length; di++) {
+    const date = dates[di];
+    const nextDate = dates[di + 1];
+    for (const t of ts) {
+      const row = history[t].find((r) => r.date === date);
+      if (!row || row.rsi14 == null) continue;
+      const nextRow = nextDate ? history[t].find((r) => r.date === nextDate) : null;
+      if (!nextRow) continue;
+      const fill = nextRow.open;
+      const p = pos[t];
+      if (p && p.qty > 0) {
+        const ret = fill / p.avg - 1;
+        if (ret <= -params.stopLossPct || ret >= params.takeProfitPct) {
+          cash += p.qty * fill * (1 - 0.0018 - 0.00015);
+          delete pos[t];
+          continue;
+        }
+      }
+      const trendOk = row.ma == null || row.close > row.ma;
+      if (row.rsi14 < params.rsiBuy && trendOk && !p) {
+        const alloc = cash * params.allocPctPerTrade;
+        const qty = Math.floor(alloc / (fill * 1.00015));
+        if (qty > 0) {
+          cash -= qty * fill * 1.00015;
+          pos[t] = { qty, avg: fill };
+        }
+      } else if (row.rsi14 > params.rsiSell && p && p.qty > 0) {
+        cash += p.qty * fill * (1 - 0.0018 - 0.00015);
+        delete pos[t];
+      }
+    }
+    let mv = cash;
+    for (const t of ts) {
+      const p = pos[t];
+      if (!p) continue;
+      const row = history[t].find((r) => r.date === date);
+      if (row) mv += p.qty * row.close;
+    }
+    curve.push({ date, equity: mv });
+  }
+
+  // 벤치마크: KOSPI 정규화
+  const { data: bench } = await supabaseAdmin
+    .from("prices")
+    .select("date,close")
+    .eq("ticker", "^KS11")
+    .gte("date", dates[0] ?? new Date().toISOString().slice(0, 10))
+    .order("date", { ascending: true });
+  const benchRows = (bench ?? []) as any[];
+  const benchBase = benchRows[0] ? Number(benchRows[0].close) : null;
+  const benchMap = new Map<string, number>();
+  if (benchBase) {
+    for (const b of benchRows) {
+      benchMap.set(b.date, (Number(b.close) / benchBase) * initial);
+    }
+  }
+  const merged = curve.map((c) => ({
+    date: c.date,
+    equity: c.equity,
+    benchmark: benchMap.get(c.date) ?? null,
+  }));
+
+  return merged;
+}

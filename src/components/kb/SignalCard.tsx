@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Minus, Target } from "lucide-react";
+import { ArrowDown, ArrowUp, Calculator, Minus, Target } from "lucide-react";
 
 interface Props {
   ticker: string;
@@ -10,6 +10,8 @@ interface Props {
   confidence?: number | null;
   winrate?: number | null;
   winrateN?: number;
+  kbReliability?: number | null;
+  baseAlloc?: number;
   currentWeight?: number;
   targetWeight?: number;
   reasons: string[];
@@ -99,6 +101,44 @@ export function SignalCard(p: Props) {
         {p.fundamentalScore != null && <Bar label="기본" value={p.fundamentalScore} max={2} />}
         {p.kbScore != null && <Bar label="KB" value={p.kbScore} max={2} />}
       </div>
+
+      {p.targetWeight != null && p.confidence != null && (p.kind === "BUY" || p.kind === "ADD") && (
+        <div
+          className="mt-3 rounded-lg border-l-2 px-2.5 py-2 text-[11px]"
+          style={{
+            borderLeftColor: style.color,
+            background: "color-mix(in oklab, var(--muted) 40%, transparent)",
+          }}
+        >
+          <div className="mb-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <Calculator className="h-2.5 w-2.5" /> 비중 산식
+          </div>
+          <div className="font-mono tabular-nums leading-relaxed text-foreground/80">
+            {((p.baseAlloc ?? 0.15) * 100).toFixed(0)}%
+            <span className="text-muted-foreground"> 기본 × </span>
+            {(p.confidence * 100).toFixed(0)}%
+            <span className="text-muted-foreground"> 신뢰</span>
+            {p.winrate != null && (p.winrateN ?? 0) > 0 && (
+              <>
+                {" × "}
+                {Math.round(p.winrate * 100)}%
+                <span className="text-muted-foreground"> 승률</span>
+              </>
+            )}
+            {p.kbReliability != null && (
+              <>
+                {" × "}
+                {p.kbReliability.toFixed(2)}
+                <span className="text-muted-foreground"> KB</span>
+              </>
+            )}
+            <span className="text-muted-foreground"> = </span>
+            <span className="font-semibold" style={{ color: style.color }}>
+              {(p.targetWeight * 100).toFixed(1)}%
+            </span>
+          </div>
+        </div>
+      )}
 
       <ul className="mt-3 space-y-1 border-t pt-3 text-[11px] text-muted-foreground">
         {p.reasons.slice(0, 6).map((r, i) => (
