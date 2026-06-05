@@ -10,6 +10,9 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { getOrCreateSystemPortfolio, getPortfolioOverview } = await import("./portfolio.server");
   const { getWinrate } = await import("./outcomes.server");
+  const { getMarketRegime, getNormalizedBenchmarkCurve } = await import("./regime.server");
+  const { checkExits } = await import("./risk.server");
+
 
   const pf = await getOrCreateSystemPortfolio();
   const overview = await getPortfolioOverview(pf.id);
