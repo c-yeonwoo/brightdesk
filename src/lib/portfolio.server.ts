@@ -61,9 +61,11 @@ export async function executeSignal(opts: {
   signalDate: string; // ISO date or timestamptz
   signalId?: string;
   allocationKrw?: number; // for BUY
+  note?: string; // sell_reason / 비고
 }) {
-  const { portfolioId, ticker, kind, signalDate, signalId } = opts;
+  const { portfolioId, ticker, kind, signalDate, signalId, note } = opts;
   if (kind === "HOLD") return { skipped: "HOLD" };
+
 
   const dateOnly = signalDate.slice(0, 10);
   const fill = await getNextDayOpen(ticker, dateOnly);
