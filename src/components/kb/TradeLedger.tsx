@@ -143,8 +143,7 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
                         {reasonStyle.label}
                       </span>
                     )}
-                    {/* placeholder to preserve original closing */}
-                    <span className="hidden">
+
 
                     {confPct != null && (
                       <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
