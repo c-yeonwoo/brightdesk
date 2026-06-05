@@ -13,6 +13,7 @@ import { ArrowRight, Briefcase, Sparkles, Activity, TrendingUp, TrendingDown, Ta
 import { AppShell } from "@/components/kb/AppShell";
 import { TradeLedger } from "@/components/kb/TradeLedger";
 import { RegimeBadge } from "@/components/kb/RegimeBadge";
+import { TodaysActions } from "@/components/kb/TodaysActions";
 import { getLiveDashboard } from "@/lib/dashboard.functions";
 import { Line } from "recharts";
 
