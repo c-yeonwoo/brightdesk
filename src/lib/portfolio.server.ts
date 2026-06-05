@@ -151,7 +151,9 @@ export async function executeSignal(opts: {
     tax,
     signal_id: signalId,
     executed_at: new Date(fill.date).toISOString(),
+    note: note ?? null,
   });
+
 
   await (sb.from("positions") as any)
     .update({ qty: 0, updated_at: new Date().toISOString() })
