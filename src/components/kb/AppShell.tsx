@@ -7,30 +7,33 @@ import { PlainModeToggle } from "./PlainModeToggle";
 import { getFxRate } from "@/lib/fx.functions";
 
 const nav = [
-  { to: "/", label: "대시보드", icon: Activity, desc: "BrightDesk Live" },
-  { to: "/my-portfolio", label: "내 포트폴리오", icon: Briefcase, desc: "AI 재구성 추천" },
-  { to: "/insights", label: "인사이트", icon: Sparkles, desc: "분석 · 시그널 · 시나리오" },
-  { to: "/data", label: "데이터", icon: Database, desc: "수집 · 원본" },
+  { to: "/", label: "대시보드", icon: Activity },
+  { to: "/my-portfolio", label: "내 포트폴리오", icon: Briefcase },
+  { to: "/insights", label: "인사이트", icon: Sparkles },
+  { to: "/data", label: "데이터", icon: Database },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-6 px-6">
-          <Link to="/" className="flex items-center gap-2">
+    <div className="min-h-dvh bg-background text-foreground">
+      <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4 sm:gap-6 sm:px-6">
+          <Link to="/" className="flex min-w-0 items-center gap-2">
             <div
-              className="h-7 w-7 rounded-md"
+              className="h-7 w-7 shrink-0 rounded-md"
               style={{ background: "linear-gradient(135deg, var(--primary), var(--domain-theme))" }}
             />
-            <div className="flex flex-col leading-tight">
+            <div className="flex min-w-0 flex-col leading-tight">
               <span className="text-sm font-semibold tracking-tight">BrightDesk</span>
-              <span className="text-[10px] text-muted-foreground">Live AI Trading Desk · 1,000만원 실증</span>
+              <span className="hidden truncate text-[10px] text-muted-foreground sm:inline">
+                Live AI Trading Desk · 1,000만원 실증
+              </span>
             </div>
           </Link>
 
-          <nav className="flex items-center gap-1">
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-1 md:flex">
             {nav.map((n) => {
               const active = path === n.to || (n.to !== "/" && path.startsWith(n.to));
               const Icon = n.icon;
@@ -52,21 +55,54 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground sm:gap-3">
             <FxBadge />
-            <span className="flex items-center gap-1.5">
+            <span className="hidden items-center gap-1.5 lg:flex">
               <span className="relative inline-flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
               </span>
-              <span className="hidden md:inline">Live · 1h 자동 갱신</span>
+              <span>Live · 1h 자동</span>
             </span>
             <PlainModeToggle />
             <AlertCenter />
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1400px] px-6 py-6">{children}</main>
+
+      {/* Page content — extra bottom padding on mobile for bottom nav */}
+      <main className="mx-auto max-w-[1400px] px-4 py-5 pb-24 sm:px-6 sm:py-6 md:pb-6">
+        {children}
+      </main>
+
+      {/* Mobile bottom nav */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <ul className="mx-auto grid max-w-[1400px] grid-cols-4">
+          {nav.map((n) => {
+            const active = path === n.to || (n.to !== "/" && path.startsWith(n.to));
+            const Icon = n.icon;
+            return (
+              <li key={n.to}>
+                <Link
+                  to={n.to}
+                  className={
+                    "flex min-h-14 flex-col items-center justify-center gap-0.5 py-2 text-[10px] transition-colors " +
+                    (active
+                      ? "text-primary font-medium"
+                      : "text-muted-foreground hover:text-foreground")
+                  }
+                >
+                  <Icon className="h-5 w-5" />
+                  <span>{n.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
     </div>
   );
 }
@@ -81,10 +117,11 @@ function FxBadge() {
   if (!data?.rate) return null;
   return (
     <span
-      className="hidden items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] font-medium tabular-nums md:inline-flex"
+      className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] font-medium tabular-nums"
       title="USD/KRW · 미국주 평가에 적용"
     >
-      <span className="text-muted-foreground">USD/KRW</span>
+      <span className="hidden text-muted-foreground sm:inline">USD/KRW</span>
+      <span className="text-muted-foreground sm:hidden">$</span>
       <span className="text-foreground">₩{Math.round(data.rate).toLocaleString()}</span>
     </span>
   );
