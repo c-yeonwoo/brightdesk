@@ -100,6 +100,9 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
           const isBuy = t.side === "BUY";
           const sig = t.signal;
           const confPct = sig?.confidence != null ? sig.confidence * 100 : null;
+          const sellReason = !isBuy ? parseSellReason(t.note) : null;
+          const reasonStyle = sellReason ? SELL_REASON_STYLE[sellReason] : null;
+
           return (
             <li key={t.id}>
               <button
