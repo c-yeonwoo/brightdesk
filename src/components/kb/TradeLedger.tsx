@@ -131,18 +131,22 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
                     >
                       {t.side}
                     </span>
-                    {reasonStyle && (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                        style={{
-                          background: `color-mix(in oklab, ${reasonStyle.color} 14%, transparent)`,
-                          color: reasonStyle.color,
-                        }}
-                      >
-                        <reasonStyle.Icon className="h-2.5 w-2.5" />
-                        {reasonStyle.label}
-                      </span>
-                    )}
+                    {reasonStyle && (() => {
+                      const ReasonIcon = reasonStyle.Icon;
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                          style={{
+                            background: `color-mix(in oklab, ${reasonStyle.color} 14%, transparent)`,
+                            color: reasonStyle.color,
+                          }}
+                        >
+                          <ReasonIcon className="h-2.5 w-2.5" />
+                          {reasonStyle.label}
+                        </span>
+                      );
+                    })()}
+
 
 
                     {confPct != null && (
