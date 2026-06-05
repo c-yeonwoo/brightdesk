@@ -128,21 +128,51 @@ function MyPortfolioPage() {
           )}
 
           <div className="space-y-2">
-            <div className="grid grid-cols-[1fr_80px_100px_24px] gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="hidden grid-cols-[1fr_70px_90px_32px] gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground sm:grid">
               <span>티커</span><span>수량</span><span>평단(선택)</span><span/>
             </div>
             {rows.map((r, i) => (
-              <div key={i} className="grid grid-cols-[1fr_80px_100px_24px] gap-2">
-                <Input value={r.ticker} onChange={(e) => setRow(i, { ticker: e.target.value })} placeholder="005930.KS" className="h-8 text-xs" />
-                <Input value={r.qty} onChange={(e) => setRow(i, { qty: e.target.value })} placeholder="10" className="h-8 text-xs" inputMode="decimal" />
-                <Input value={r.avg_price} onChange={(e) => setRow(i, { avg_price: e.target.value })} placeholder="72000" className="h-8 text-xs" inputMode="decimal" />
-                <button onClick={() => removeRow(i)} className="text-muted-foreground hover:text-destructive">
-                  <Trash2 className="h-3.5 w-3.5" />
+              <div
+                key={i}
+                className="grid grid-cols-[1fr_70px_90px_32px] gap-2 rounded-md border border-transparent p-1 sm:border-0 sm:p-0"
+              >
+                <Input
+                  value={r.ticker}
+                  onChange={(e) => setRow(i, { ticker: e.target.value })}
+                  placeholder="005930.KS"
+                  className="h-10 text-xs sm:h-8"
+                  aria-label="티커"
+                />
+                <Input
+                  value={r.qty}
+                  onChange={(e) => setRow(i, { qty: e.target.value })}
+                  placeholder="수량"
+                  className="h-10 text-xs sm:h-8"
+                  inputMode="decimal"
+                  aria-label="수량"
+                />
+                <Input
+                  value={r.avg_price}
+                  onChange={(e) => setRow(i, { avg_price: e.target.value })}
+                  placeholder="평단"
+                  className="h-10 text-xs sm:h-8"
+                  inputMode="decimal"
+                  aria-label="평단"
+                />
+                <button
+                  onClick={() => removeRow(i)}
+                  className="flex h-10 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-8"
+                  aria-label="삭제"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             ))}
-            <button onClick={addRow} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-              <Plus className="h-3 w-3" /> 종목 추가
+            <button
+              onClick={addRow}
+              className="inline-flex h-9 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> 종목 추가
             </button>
           </div>
 

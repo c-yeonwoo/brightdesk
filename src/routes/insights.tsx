@@ -50,7 +50,7 @@ function InsightsPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex gap-1 border-b">
+      <div className="mb-4 -mx-4 flex gap-1 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -59,7 +59,7 @@ function InsightsPage() {
               key={t.id}
               onClick={() => setTab(t.id)}
               className={
-                "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs transition-colors " +
+                "inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs transition-colors " +
                 (active
                   ? "border-primary text-foreground font-medium"
                   : "border-transparent text-muted-foreground hover:text-foreground")
@@ -342,65 +342,67 @@ function BacktestTab() {
         <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
           전체 시나리오 ({rows.length}) · Score 순
         </div>
-        <table className="w-full text-xs">
-          <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left">시나리오</th>
-              <th className="px-3 py-2 text-left">파라미터</th>
-              <th className="px-3 py-2 text-right">수익</th>
-              <th className="px-3 py-2 text-right">Sharpe</th>
-              <th className="px-3 py-2 text-right">MDD</th>
-              <th className="px-3 py-2 text-right">Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-xs">
+            <thead className="bg-muted/40 text-[10px] uppercase text-muted-foreground">
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                  불러오는 중…
-                </td>
+                <th className="px-3 py-2 text-left">시나리오</th>
+                <th className="px-3 py-2 text-left">파라미터</th>
+                <th className="px-3 py-2 text-right">수익</th>
+                <th className="px-3 py-2 text-right">Sharpe</th>
+                <th className="px-3 py-2 text-right">MDD</th>
+                <th className="px-3 py-2 text-right">Score</th>
               </tr>
-            )}
-            {!isLoading && rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                  아직 결과가 없습니다. "시뮬레이션 재실행"을 눌러주세요.
-                </td>
-              </tr>
-            )}
-            {rows.map((s: any, i: number) => {
-              const p = s.params as any;
-              const ret = Number(s.total_return);
-              return (
-                <tr key={s.id} className={"border-t " + (i === 0 ? "bg-amber-500/5" : "")}>
-                  <td className="px-3 py-2 font-medium">
-                    {i === 0 && <span className="mr-1">🏆</span>}
-                    {s.name}
-                  </td>
-                  <td className="px-3 py-2 text-[10px] text-muted-foreground">
-                    RSI {p.rsiBuy}/{p.rsiSell} · 배분 {(p.allocPctPerTrade * 100).toFixed(0)}% · SL{" "}
-                    {(p.stopLossPct * 100).toFixed(0)}% · TP {(p.takeProfitPct * 100).toFixed(0)}%
-                  </td>
-                  <td
-                    className="px-3 py-2 text-right font-mono tabular-nums"
-                    style={{ color: ret >= 0 ? "var(--success)" : "var(--danger)" }}
-                  >
-                    {(ret * 100).toFixed(2)}%
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {Number(s.sharpe).toFixed(2)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums text-danger">
-                    -{(Number(s.mdd) * 100).toFixed(1)}%
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold">
-                    {Number(s.score).toFixed(2)}
+            </thead>
+            <tbody>
+              {isLoading && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                    불러오는 중…
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+              {!isLoading && rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                    아직 결과가 없습니다. "시뮬레이션 재실행"을 눌러주세요.
+                  </td>
+                </tr>
+              )}
+              {rows.map((s: any, i: number) => {
+                const p = s.params as any;
+                const ret = Number(s.total_return);
+                return (
+                  <tr key={s.id} className={"border-t " + (i === 0 ? "bg-amber-500/5" : "")}>
+                    <td className="px-3 py-2 font-medium">
+                      {i === 0 && <span className="mr-1">🏆</span>}
+                      {s.name}
+                    </td>
+                    <td className="px-3 py-2 text-[10px] text-muted-foreground">
+                      RSI {p.rsiBuy}/{p.rsiSell} · 배분 {(p.allocPctPerTrade * 100).toFixed(0)}% · SL{" "}
+                      {(p.stopLossPct * 100).toFixed(0)}% · TP {(p.takeProfitPct * 100).toFixed(0)}%
+                    </td>
+                    <td
+                      className="px-3 py-2 text-right font-mono tabular-nums"
+                      style={{ color: ret >= 0 ? "var(--success)" : "var(--danger)" }}
+                    >
+                      {(ret * 100).toFixed(2)}%
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      {Number(s.sharpe).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-danger">
+                      -{(Number(s.mdd) * 100).toFixed(1)}%
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums font-semibold">
+                      {Number(s.score).toFixed(2)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">

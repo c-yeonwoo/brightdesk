@@ -48,22 +48,22 @@ function DashboardPage() {
 
   return (
     <AppShell>
-      <div className="mb-6 flex items-end justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">BrightDesk Live</h1>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight sm:text-xl">BrightDesk Live</h1>
             <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
               자체 운용 1,000만원
             </span>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
             1시간마다 KB·기술·기본 분석을 종합해 자동 리밸런싱하는 실시간 트레이딩 데스크.
           </p>
         </div>
         <Link
           to="/my-portfolio"
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground hover:opacity-90"
+          className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-xs font-medium text-primary-foreground shadow-sm hover:opacity-90 sm:h-9"
         >
           <Briefcase className="h-3.5 w-3.5" />
           내 포트폴리오 분석
@@ -253,26 +253,28 @@ function DashboardContent({ data }: { data: any }) {
           {data.positions.length === 0 ? (
             <div className="py-6 text-center text-xs text-muted-foreground">아직 보유 종목 없음</div>
           ) : (
-            <table className="w-full text-xs">
-              <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                <tr><th className="text-left">종목</th><th className="text-right">수량</th><th className="text-right">평가</th><th className="text-right">손익</th></tr>
-              </thead>
-              <tbody>
-                {data.positions.map((p: any) => (
-                  <tr key={p.id} className="border-t">
-                    <td className="py-1.5 font-medium">{p.ticker}</td>
-                    <td className="py-1.5 text-right tabular-nums">{Number(p.qty)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{fmtKrw(p.market_value)}</td>
-                    <td
-                      className="py-1.5 text-right tabular-nums"
-                      style={{ color: (p.pl ?? 0) >= 0 ? "var(--success)" : "var(--danger)" }}
-                    >
-                      {p.pl_pct != null ? `${p.pl_pct >= 0 ? "+" : ""}${p.pl_pct.toFixed(2)}%` : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="-mx-1 overflow-x-auto">
+              <table className="w-full min-w-[320px] text-xs">
+                <thead className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <tr><th className="px-1 text-left">종목</th><th className="px-1 text-right">수량</th><th className="px-1 text-right">평가</th><th className="px-1 text-right">손익</th></tr>
+                </thead>
+                <tbody>
+                  {data.positions.map((p: any) => (
+                    <tr key={p.id} className="border-t">
+                      <td className="px-1 py-2 font-medium">{p.ticker}</td>
+                      <td className="px-1 py-2 text-right tabular-nums">{Number(p.qty)}</td>
+                      <td className="px-1 py-2 text-right tabular-nums">{fmtKrw(p.market_value)}</td>
+                      <td
+                        className="px-1 py-2 text-right tabular-nums"
+                        style={{ color: (p.pl ?? 0) >= 0 ? "var(--success)" : "var(--danger)" }}
+                      >
+                        {p.pl_pct != null ? `${p.pl_pct >= 0 ? "+" : ""}${p.pl_pct.toFixed(2)}%` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
