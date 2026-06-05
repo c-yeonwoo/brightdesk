@@ -6,7 +6,7 @@ import { getMatchingAlerts } from "@/lib/alerts.functions";
 interface AlertRules {
   enabled: boolean;
   minConfidence: number; // 0..1
-  kinds: ("BUY" | "SELL" | "ADD" | "REDUCE")[];
+  kinds: ("BUY" | "SELL")[];
   tickers: string[]; // empty = all
   sinceHours: number;
   channelEmail: boolean; // 자리만 — 추후 라우팅
@@ -283,7 +283,7 @@ function RulesEditor({
       <div>
         <div className="mb-1.5 font-medium">시그널 종류</div>
         <div className="flex flex-wrap gap-1.5">
-          {(["BUY", "SELL", "ADD", "REDUCE"] as const).map((k) => {
+          {(["BUY", "SELL"] as const).map((k) => {
             const on = rules.kinds.includes(k);
             return (
               <button

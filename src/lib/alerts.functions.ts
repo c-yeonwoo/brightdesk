@@ -11,7 +11,7 @@ export const getMatchingAlerts = createServerFn({ method: "POST" })
     z
       .object({
         minConfidence: z.number().min(0).max(1).optional(),
-        kinds: z.array(z.enum(["BUY", "SELL", "ADD", "REDUCE"])).optional(),
+        kinds: z.array(z.enum(["BUY", "SELL", "HOLD"])).optional(),
         tickers: z.array(z.string().min(1).max(20)).optional(),
         sinceHours: z.number().int().min(1).max(168).optional(),
         limit: z.number().int().min(1).max(100).optional(),
