@@ -148,6 +148,8 @@ function FactsTab() {
 
 function BacktestTab() {
   const qc = useQueryClient();
+  const { plain } = usePlainMode();
+  const [invest, setInvest] = useState(1_000_000);
   const { data: scenarios, isLoading } = useQuery({
     queryKey: ["scenarios"],
     queryFn: () => getScenarios(),
@@ -173,6 +175,14 @@ function BacktestTab() {
   const benchFinal = [...curve].reverse().find((c) => c.benchmark != null)?.benchmark;
   const benchRet = benchFinal ? ((benchFinal / initial - 1) * 100).toFixed(2) : null;
   const alpha = benchRet ? (Number(portfolioRet) - Number(benchRet)).toFixed(2) : null;
+
+  // KRW 시뮬레이션
+  const retPct = Number(portfolioRet) / 100;
+  const finalKrw = Math.round(invest * (1 + retPct));
+  const gainKrw = finalKrw - invest;
+  const mddVal = best ? Number(best.mdd) : 0;
+  const { worst, loss } = mddInKrw(invest, mddVal);
+  const fmt = (n: number) => new Intl.NumberFormat("ko-KR").format(n);
 
   return (
     <div className="space-y-4">
