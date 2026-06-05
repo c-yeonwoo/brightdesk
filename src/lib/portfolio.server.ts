@@ -63,7 +63,7 @@ export async function executeSignal(opts: {
   kind: "BUY" | "SELL" | "HOLD";
   signalDate: string; // ISO date or timestamptz
   signalId?: string;
-  allocationKrw?: number; // for BUY
+  allocationKrw?: number; // for BUY (항상 KRW 기준)
   note?: string; // sell_reason / 비고
 }) {
   const { portfolioId, ticker, kind, signalDate, signalId, note } = opts;
@@ -85,35 +85,40 @@ export async function executeSignal(opts: {
     .eq("ticker", ticker)
     .maybeSingle();
 
-  const price = fill.open;
+  const price = fill.open; // native (USD/KRW)
+  const us = isUsTicker(ticker);
+  const fxRate = us ? await getUsdKrwOn(fill.date) : 1;
+  const priceKrw = price * fxRate; // 원화 환산 단가
+  const feeRate = us ? US_FEE_RATE : FEE_RATE;
 
   if (kind === "BUY") {
-    const cash = Number(pf.cash);
-    const alloc = Math.min(opts.allocationKrw ?? cash * 0.1, cash);
-    if (alloc < price) return { skipped: "insufficient cash" };
-    const qty = Math.floor(alloc / (price * (1 + FEE_RATE)));
+    const cash = Number(pf.cash); // KRW
+    const allocKrw = Math.min(opts.allocationKrw ?? cash * 0.1, cash);
+    if (allocKrw < priceKrw) return { skipped: "insufficient cash" };
+    const qty = Math.floor(allocKrw / (priceKrw * (1 + feeRate)));
     if (qty <= 0) return { skipped: "qty 0" };
-    const cost = qty * price;
-    const fee = cost * FEE_RATE;
-    const total = cost + fee;
+    const costKrw = qty * priceKrw;
+    const feeKrw = costKrw * feeRate;
+    const totalKrw = costKrw + feeKrw;
 
     await (sb.from("transactions") as any).insert({
       portfolio_id: portfolioId,
       ticker,
       side: "BUY",
       qty,
-      price,
-      fee,
+      price, // native 가격 보존
+      fee: feeKrw, // KRW
       tax: 0,
       signal_id: signalId,
       executed_at: new Date(fill.date).toISOString(),
-      note: note ?? null,
+      note: note ?? (us ? `fx=${fxRate.toFixed(2)}` : null),
     });
 
 
     const newQty = Number(pos?.qty ?? 0) + qty;
+    // avg_price는 native 통화 기준으로 유지 (KR=KRW, US=USD)
     const newAvg = pos
-      ? (Number(pos.qty) * Number(pos.avg_price) + cost) / newQty
+      ? (Number(pos.qty) * Number(pos.avg_price) + qty * price) / newQty
       : price;
 
     if (pos) {
@@ -130,19 +135,19 @@ export async function executeSignal(opts: {
     }
 
     await (sb.from("portfolios") as any)
-      .update({ cash: cash - total, updated_at: new Date().toISOString() })
+      .update({ cash: cash - totalKrw, updated_at: new Date().toISOString() })
       .eq("id", portfolioId);
 
-    return { side: "BUY", qty, price, fee, total };
+    return { side: "BUY", qty, price, fee: feeKrw, total: totalKrw, fx: fxRate };
   }
 
   // SELL
   if (!pos || Number(pos.qty) <= 0) return { skipped: "no position" };
   const qty = Number(pos.qty);
-  const gross = qty * price;
-  const fee = gross * FEE_RATE;
-  const tax = gross * TAX_RATE;
-  const net = gross - fee - tax;
+  const grossKrw = qty * priceKrw;
+  const feeKrw = grossKrw * feeRate;
+  const taxKrw = us ? 0 : grossKrw * TAX_RATE; // 미국은 양도세 일괄 X (모의)
+  const netKrw = grossKrw - feeKrw - taxKrw;
 
   await (sb.from("transactions") as any).insert({
     portfolio_id: portfolioId,
@@ -150,11 +155,11 @@ export async function executeSignal(opts: {
     side: "SELL",
     qty,
     price,
-    fee,
-    tax,
+    fee: feeKrw,
+    tax: taxKrw,
     signal_id: signalId,
     executed_at: new Date(fill.date).toISOString(),
-    note: note ?? null,
+    note: note ?? (us ? `fx=${fxRate.toFixed(2)}` : null),
   });
 
 
@@ -163,10 +168,10 @@ export async function executeSignal(opts: {
     .eq("id", pos.id);
 
   await (sb.from("portfolios") as any)
-    .update({ cash: Number(pf.cash) + net, updated_at: new Date().toISOString() })
+    .update({ cash: Number(pf.cash) + netKrw, updated_at: new Date().toISOString() })
     .eq("id", portfolioId);
 
-  return { side: "SELL", qty, price, fee, tax, net };
+  return { side: "SELL", qty, price, fee: feeKrw, tax: taxKrw, net: netKrw, fx: fxRate };
 }
 
 export async function applyAllRecentSignals(
