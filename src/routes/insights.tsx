@@ -1,11 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, TrendingUp, Database, BarChart3, Loader2, Play, Trophy } from "lucide-react";
+import { Sparkles, TrendingUp, Database, BarChart3, Loader2, Play, Trophy, Wallet } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
 import { SignalCard } from "@/components/kb/SignalCard";
+import { TermTooltip } from "@/components/kb/TermTooltip";
 import { getLatestSignalPerTicker, listSignals } from "@/lib/signals.functions";
 import { listFacts } from "@/lib/kb.functions";
 import { getBestScenarioCurve, getScenarios, runScenarios } from "@/lib/scenarios.functions";
+import { mddInKrw, usePlainMode } from "@/lib/plain-mode";
+import { Slider } from "@/components/ui/slider";
 import {
   Area,
   AreaChart,
@@ -145,6 +148,8 @@ function FactsTab() {
 
 function BacktestTab() {
   const qc = useQueryClient();
+  const { plain } = usePlainMode();
+  const [invest, setInvest] = useState(1_000_000);
   const { data: scenarios, isLoading } = useQuery({
     queryKey: ["scenarios"],
     queryFn: () => getScenarios(),
@@ -170,6 +175,14 @@ function BacktestTab() {
   const benchFinal = [...curve].reverse().find((c) => c.benchmark != null)?.benchmark;
   const benchRet = benchFinal ? ((benchFinal / initial - 1) * 100).toFixed(2) : null;
   const alpha = benchRet ? (Number(portfolioRet) - Number(benchRet)).toFixed(2) : null;
+
+  // KRW 시뮬레이션
+  const retPct = Number(portfolioRet) / 100;
+  const finalKrw = Math.round(invest * (1 + retPct));
+  const gainKrw = finalKrw - invest;
+  const mddVal = best ? Number(best.mdd) : 0;
+  const { worst, loss } = mddInKrw(invest, mddVal);
+  const fmt = (n: number) => new Intl.NumberFormat("ko-KR").format(n);
 
   return (
     <div className="space-y-4">
@@ -203,15 +216,65 @@ function BacktestTab() {
               {benchRet && <Metric label="벤치마크" value={`${benchRet}%`} muted />}
               {alpha && (
                 <Metric
-                  label="알파"
+                  label={plain ? "초과수익" : "알파"}
                   value={`${Number(alpha) >= 0 ? "+" : ""}${alpha}%p`}
                   tone={Number(alpha) >= 0 ? "pos" : "neg"}
                 />
               )}
-              <Metric label="Sharpe" value={Number(best.sharpe).toFixed(2)} />
-              <Metric label="MDD" value={`-${(Number(best.mdd) * 100).toFixed(1)}%`} tone="neg" />
+              {!plain && <Metric label="Sharpe" value={Number(best.sharpe).toFixed(2)} />}
+              <Metric label={plain ? "최악 낙폭" : "MDD"} value={`-${(Number(best.mdd) * 100).toFixed(1)}%`} tone="neg" />
             </div>
           </div>
+
+          {/* KRW 시뮬레이터 */}
+          <div className="mb-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 text-xs font-medium">
+                <Wallet className="h-3.5 w-3.5 text-primary" />
+                {plain ? "내가 1년 전 투자했다면?" : "투자금 시뮬레이터"}
+              </div>
+              <div className="text-sm font-semibold tabular-nums text-primary">
+                {fmt(invest)}원
+              </div>
+            </div>
+            <Slider
+              value={[invest]}
+              min={100_000}
+              max={50_000_000}
+              step={100_000}
+              onValueChange={(v) => setInvest(v[0])}
+              className="my-2"
+              aria-label="투자 금액"
+            />
+            <div className="mt-2 grid gap-2 text-[11px] sm:grid-cols-3">
+              <div className="rounded-md bg-card/60 p-2">
+                <div className="text-muted-foreground">{plain ? "지금 평가액" : "최종 자산"}</div>
+                <div className="text-sm font-semibold tabular-nums" style={{ color: gainKrw >= 0 ? "var(--success)" : "var(--danger)" }}>
+                  {fmt(finalKrw)}원
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  {gainKrw >= 0 ? "+" : ""}{fmt(gainKrw)}원
+                </div>
+              </div>
+              <div className="rounded-md bg-card/60 p-2">
+                <div className="text-muted-foreground">
+                  {plain ? "최악일 땐 (낙폭)" : "MDD 적용 잔액"}
+                </div>
+                <div className="text-sm font-semibold tabular-nums text-danger">{fmt(worst)}원</div>
+                <div className="text-[10px] text-muted-foreground">-{fmt(loss)}원 손실 감수</div>
+              </div>
+              <div className="rounded-md bg-card/60 p-2">
+                <div className="text-muted-foreground">{plain ? "KOSPI에 똑같이" : "벤치마크 비교"}</div>
+                <div className="text-sm font-semibold tabular-nums">
+                  {benchRet ? `${fmt(Math.round(invest * (1 + Number(benchRet) / 100)))}원` : "—"}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  {alpha ? `차이 ${Number(alpha) >= 0 ? "+" : ""}${fmt(Math.round(invest * Number(alpha) / 100))}원` : ""}
+                </div>
+              </div>
+            </div>
+          </div>
+
 
           <div className="h-[280px]">
             {curveLoading ? (

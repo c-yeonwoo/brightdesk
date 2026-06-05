@@ -13,6 +13,7 @@ import { ArrowRight, Briefcase, Sparkles, Activity, TrendingUp, TrendingDown, Ta
 import { AppShell } from "@/components/kb/AppShell";
 import { TradeLedger } from "@/components/kb/TradeLedger";
 import { RegimeBadge } from "@/components/kb/RegimeBadge";
+import { TodaysActions } from "@/components/kb/TodaysActions";
 import { getLiveDashboard } from "@/lib/dashboard.functions";
 import { Line } from "recharts";
 
@@ -135,6 +136,8 @@ function DashboardContent({ data }: { data: any }) {
         />
       </div>
 
+      {/* 오늘의 액션 */}
+      <TodaysActions exitAlerts={data.exit_alerts ?? []} recentSignals={data.recent_signals ?? []} />
 
       {/* Curve + Regime + Activity */}
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
