@@ -1,5 +1,23 @@
-import { ArrowDownRight, ArrowUpRight, Info } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Info, ShieldAlert, Target as TargetIcon } from "lucide-react";
 import { useState } from "react";
+
+type SellReason = "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING" | "REGIME_DOWNGRADE" | "SIGNAL";
+
+const SELL_REASON_STYLE: Record<SellReason, { label: string; color: string; Icon: any }> = {
+  STOP_LOSS:         { label: "손절",     color: "var(--danger)",  Icon: ShieldAlert },
+  TAKE_PROFIT:       { label: "익절",     color: "var(--success)", Icon: TargetIcon },
+  TRAILING:          { label: "트레일링", color: "var(--warning)", Icon: ShieldAlert },
+  REGIME_DOWNGRADE:  { label: "레짐악화", color: "var(--warning)", Icon: ShieldAlert },
+  SIGNAL:            { label: "시그널",   color: "var(--muted-foreground)", Icon: Info },
+};
+
+function parseSellReason(note?: string | null): SellReason | null {
+  if (!note) return null;
+  const m = note.match(/sell_reason:([A-Z_]+)/);
+  return m ? (m[1] as SellReason) : null;
+}
+
+
 
 type Trade = {
   id: string;
@@ -82,6 +100,9 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
           const isBuy = t.side === "BUY";
           const sig = t.signal;
           const confPct = sig?.confidence != null ? sig.confidence * 100 : null;
+          const sellReason = !isBuy ? parseSellReason(t.note) : null;
+          const reasonStyle = sellReason ? SELL_REASON_STYLE[sellReason] : null;
+
           return (
             <li key={t.id}>
               <button
@@ -110,6 +131,20 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
                     >
                       {t.side}
                     </span>
+                    {reasonStyle && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                        style={{
+                          background: `color-mix(in oklab, ${reasonStyle.color} 14%, transparent)`,
+                          color: reasonStyle.color,
+                        }}
+                      >
+                        <reasonStyle.Icon className="h-2.5 w-2.5" />
+                        {reasonStyle.label}
+                      </span>
+                    )}
+
+
                     {confPct != null && (
                       <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                         신뢰도 {confPct.toFixed(0)}%

@@ -9,10 +9,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowRight, Briefcase, Sparkles, Activity, TrendingUp, TrendingDown, Target } from "lucide-react";
+import { ArrowRight, Briefcase, Sparkles, Activity, TrendingUp, TrendingDown, Target, AlertTriangle } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
 import { TradeLedger } from "@/components/kb/TradeLedger";
+import { RegimeBadge } from "@/components/kb/RegimeBadge";
 import { getLiveDashboard } from "@/lib/dashboard.functions";
+import { Line } from "recharts";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -133,12 +136,15 @@ function DashboardContent({ data }: { data: any }) {
       </div>
 
 
-      {/* Curve + 24h activity */}
+      {/* Curve + Regime + Activity */}
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <div className="rounded-xl border bg-card p-5 lg:col-span-2">
           <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold">자산 곡선</h2>
-            <span className="text-[11px] text-muted-foreground">{data.curve.length}일 스냅샷</span>
+            <h2 className="text-sm font-semibold">자산 곡선 vs 벤치마크</h2>
+            <span className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} /> 포트폴리오</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: "var(--muted-foreground)" }} /> {data.regime?.ticker ?? "^KS11"}</span>
+            </span>
           </div>
           <div className="h-64">
             {data.curve.length === 0 ? (
@@ -166,38 +172,69 @@ function DashboardContent({ data }: { data: any }) {
                     contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
                     formatter={(v: number) => `${fmtKrw(v)}원`}
                   />
-                  <Area type="monotone" dataKey="total_value" stroke="var(--primary)" fill="url(#totalGrad)" strokeWidth={2} name="총자산" />
+                  <Area type="monotone" dataKey="total_value" stroke="var(--primary)" fill="url(#totalGrad)" strokeWidth={2} name="포트폴리오" />
+                  <Line type="monotone" dataKey="benchmark_value" stroke="var(--muted-foreground)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} name="벤치마크" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card p-5">
-          <h2 className="mb-3 text-sm font-semibold">24h 활동</h2>
-          <div className="mb-3 grid grid-cols-3 gap-2 text-center">
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">시그널</div>
-              <div className="text-lg font-semibold tabular-nums">{data.recent_signals.length}</div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매수</div>
-              <div className="text-lg font-semibold tabular-nums" style={{ color: "var(--success)" }}>
-                {data.trade_ledger.filter((t: any) => t.side === "BUY" && t.executed_at >= new Date(Date.now() - 86400000).toISOString()).length}
+        <div className="flex flex-col gap-3">
+          {data.regime && <RegimeBadge {...data.regime} />}
+
+          <div className="rounded-xl border bg-card p-4">
+            <h2 className="mb-2 text-sm font-semibold">24h 활동</h2>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">시그널</div>
+                <div className="text-base font-semibold tabular-nums">{data.recent_signals.length}</div>
               </div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매도</div>
-              <div className="text-lg font-semibold tabular-nums" style={{ color: "var(--danger)" }}>
-                {data.trade_ledger.filter((t: any) => t.side === "SELL" && t.executed_at >= new Date(Date.now() - 86400000).toISOString()).length}
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매수</div>
+                <div className="text-base font-semibold tabular-nums" style={{ color: "var(--success)" }}>
+                  {data.trade_ledger.filter((t: any) => t.side === "BUY" && t.executed_at >= new Date(Date.now() - 86400000).toISOString()).length}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">매도</div>
+                <div className="text-base font-semibold tabular-nums" style={{ color: "var(--danger)" }}>
+                  {data.trade_ledger.filter((t: any) => t.side === "SELL" && t.executed_at >= new Date(Date.now() - 86400000).toISOString()).length}
+                </div>
               </div>
             </div>
           </div>
-          <div className="rounded-md border-t pt-3 text-[11px] text-muted-foreground">
-            <p>매 1시간 cron이 신뢰도 ≥ 임계치 시그널만 자동 체결. 모든 거래는 근거 시그널과 영구 결합됩니다.</p>
-          </div>
+
+          {data.exit_alerts && data.exit_alerts.length > 0 && (
+            <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">
+              <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-warning">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                손절/익절 트리거 ({data.exit_alerts.length})
+              </h2>
+              <ul className="space-y-1.5">
+                {data.exit_alerts.slice(0, 4).map((e: any) => (
+                  <li key={e.ticker} className="flex items-start justify-between gap-2 text-[11px]">
+                    <div>
+                      <span className="font-medium">{e.ticker}</span>
+                      <span className="ml-1.5 rounded bg-warning/15 px-1 py-0.5 text-[9px] font-medium text-warning">
+                        {e.reason}
+                      </span>
+                      <div className="text-[10px] text-muted-foreground">{e.message}</div>
+                    </div>
+                    <span
+                      className="shrink-0 tabular-nums"
+                      style={{ color: e.pl_pct >= 0 ? "var(--success)" : "var(--danger)" }}
+                    >
+                      {e.pl_pct >= 0 ? "+" : ""}{e.pl_pct.toFixed(2)}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
+
 
       {/* 거래 원장 (근거 첨부) */}
       <div className="mt-6">
