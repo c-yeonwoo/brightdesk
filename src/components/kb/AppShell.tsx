@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Activity, Briefcase, Database, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
+import { AlertCenter } from "./AlertCenter";
 
 const nav = [
   { to: "/", label: "대시보드", icon: Activity, desc: "BrightDesk Live" },
@@ -48,12 +49,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="relative inline-flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+          <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="relative inline-flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+              </span>
+              <span>Live · 1h 자동 갱신</span>
             </span>
-            <span>Live · 1h 자동 갱신</span>
+            <AlertCenter />
           </div>
         </div>
       </header>
