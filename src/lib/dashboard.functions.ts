@@ -95,10 +95,20 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
     .limit(8);
 
   // 전체 승률 (BUY/SELL)
-  const [buyWR, sellWR] = await Promise.all([
+  const [buyWR, sellWR, regime, benchmarkCurve, exitChecks] = await Promise.all([
     getWinrate({ kind: "BUY" }),
     getWinrate({ kind: "SELL" }),
+    getMarketRegime("^KS11"),
+    getNormalizedBenchmarkCurve(Number(overview.portfolio?.initial_cash ?? 10000000), "^KS11", 180),
+    checkExits(pf.id).catch(() => []),
   ]);
+
+  // 자산곡선 + 벤치마크 머지 (date 기준)
+  const benchMap = new Map(benchmarkCurve.map((b) => [b.date, b.benchmark_value]));
+  const mergedCurve = (snapshots ?? []).map((s: any) => ({
+    ...s,
+    benchmark_value: benchMap.get(s.date) ?? null,
+  }));
 
   // 최근 7일 거래만 별도 카운트
   const day7 = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
@@ -108,11 +118,17 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
     portfolio: overview.portfolio,
     summary: overview.summary,
     positions: overview.positions,
-    curve: snapshots ?? [],
+    curve: mergedCurve,
     recent_signals: recentSigs ?? [],
     trade_ledger: tradeLedger,
     txns_7d_count: txns7.length,
     recent_facts: recentFacts ?? [],
+    winrate: { buy: buyWR, sell: sellWR },
+    regime,
+    exit_alerts: exitChecks.filter((e) => e.triggered),
+  };
+});
+
     winrate: { buy: buyWR, sell: sellWR },
   };
 });
