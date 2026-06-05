@@ -104,7 +104,9 @@ export async function executeSignal(opts: {
       tax: 0,
       signal_id: signalId,
       executed_at: new Date(fill.date).toISOString(),
+      note: note ?? null,
     });
+
 
     const newQty = Number(pos?.qty ?? 0) + qty;
     const newAvg = pos
