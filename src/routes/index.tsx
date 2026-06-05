@@ -136,6 +136,8 @@ function DashboardContent({ data }: { data: any }) {
         />
       </div>
 
+      {/* 오늘의 액션 */}
+      <TodaysActions exitAlerts={data.exit_alerts ?? []} recentSignals={data.recent_signals ?? []} />
 
       {/* Curve + Regime + Activity */}
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
