@@ -16,6 +16,14 @@ export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
           log.collect_error = e?.message ?? String(e);
         }
 
+        // 환율(USD/KRW) 갱신 — 미국주 KRW 환산용
+        try {
+          const { refreshFxHistory } = await import("@/lib/fx.server");
+          log.fx = await refreshFxHistory();
+        } catch (e: any) {
+          log.fx_error = e?.message ?? String(e);
+        }
+
         try {
           const { generateSignalsForAll } = await import("@/lib/signals.server");
           log.signals = await generateSignalsForAll();

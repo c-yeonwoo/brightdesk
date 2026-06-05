@@ -1,8 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Activity, Briefcase, Database, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCenter } from "./AlertCenter";
 import { PlainModeToggle } from "./PlainModeToggle";
+import { getFxRate } from "@/lib/fx.functions";
 
 const nav = [
   { to: "/", label: "대시보드", icon: Activity, desc: "BrightDesk Live" },
@@ -51,6 +53,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+            <FxBadge />
             <span className="flex items-center gap-1.5">
               <span className="relative inline-flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
@@ -65,5 +68,24 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <main className="mx-auto max-w-[1400px] px-6 py-6">{children}</main>
     </div>
+  );
+}
+
+function FxBadge() {
+  const { data } = useQuery({
+    queryKey: ["fx-rate"],
+    queryFn: () => getFxRate(),
+    staleTime: 30 * 60 * 1000,
+    refetchInterval: 30 * 60 * 1000,
+  });
+  if (!data?.rate) return null;
+  return (
+    <span
+      className="hidden items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] font-medium tabular-nums md:inline-flex"
+      title="USD/KRW · 미국주 평가에 적용"
+    >
+      <span className="text-muted-foreground">USD/KRW</span>
+      <span className="text-foreground">₩{Math.round(data.rate).toLocaleString()}</span>
+    </span>
   );
 }
