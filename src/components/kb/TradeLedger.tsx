@@ -1,6 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Info, ShieldAlert, Target as TargetIcon } from "lucide-react";
 import { useState } from "react";
-import { parseSellReason, type SellReason } from "@/lib/risk.server";
+
+type SellReason = "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING" | "REGIME_DOWNGRADE" | "SIGNAL";
 
 const SELL_REASON_STYLE: Record<SellReason, { label: string; color: string; Icon: any }> = {
   STOP_LOSS:         { label: "손절",     color: "var(--danger)",  Icon: ShieldAlert },
@@ -9,6 +10,13 @@ const SELL_REASON_STYLE: Record<SellReason, { label: string; color: string; Icon
   REGIME_DOWNGRADE:  { label: "레짐악화", color: "var(--warning)", Icon: ShieldAlert },
   SIGNAL:            { label: "시그널",   color: "var(--muted-foreground)", Icon: Info },
 };
+
+function parseSellReason(note?: string | null): SellReason | null {
+  if (!note) return null;
+  const m = note.match(/sell_reason:([A-Z_]+)/);
+  return m ? (m[1] as SellReason) : null;
+}
+
 
 
 type Trade = {
