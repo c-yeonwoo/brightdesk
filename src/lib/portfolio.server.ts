@@ -226,10 +226,13 @@ export async function snapshotPortfolio(portfolioId: string) {
   if (!pf) throw new Error("portfolio not found");
   const { data: positions } = await sb.from("positions").select("*").eq("portfolio_id", portfolioId).gt("qty", 0);
 
+  const fx = await getUsdKrwSpot();
   let holdings = 0;
   for (const p of (positions ?? []) as any[]) {
     const last = await getLatestPrice(p.ticker);
-    if (last) holdings += Number(p.qty) * last.close;
+    if (!last) continue;
+    const priceKrw = isUsTicker(p.ticker) ? last.close * fx : last.close;
+    holdings += Number(p.qty) * priceKrw;
   }
   const total = Number(pf.cash) + holdings;
   const today = new Date().toISOString().slice(0, 10);
@@ -243,7 +246,7 @@ export async function snapshotPortfolio(portfolioId: string) {
     },
     { onConflict: "portfolio_id,date" },
   );
-  return { cash: Number(pf.cash), holdings, total };
+  return { cash: Number(pf.cash), holdings, total, fx };
 }
 
 export async function getPortfolioOverview(portfolioId: string) {
@@ -257,17 +260,25 @@ export async function getPortfolioOverview(portfolioId: string) {
     .order("executed_at", { ascending: false })
     .limit(50);
 
+  const fx = await getUsdKrwSpot();
   const enrichedPositions: any[] = [];
   let holdings = 0;
   for (const p of (positions ?? []) as any[]) {
     const last = await getLatestPrice(p.ticker);
-    const mkt = last ? Number(p.qty) * last.close : 0;
+    const us = isUsTicker(p.ticker);
+    const priceKrw = last ? (us ? last.close * fx : last.close) : null;
+    const avgKrw = us ? Number(p.avg_price) * fx : Number(p.avg_price);
+    const mkt = priceKrw != null ? Number(p.qty) * priceKrw : 0;
     holdings += mkt;
     enrichedPositions.push({
       ...p,
-      last_price: last?.close ?? null,
-      market_value: mkt,
-      pl: last ? (last.close - Number(p.avg_price)) * Number(p.qty) : null,
+      currency: us ? "USD" : "KRW",
+      fx_rate: us ? fx : 1,
+      last_price: last?.close ?? null, // native
+      last_price_krw: priceKrw, // KRW 환산
+      avg_price_krw: avgKrw,
+      market_value: mkt, // KRW
+      pl: last ? (priceKrw! - avgKrw) * Number(p.qty) : null,
       pl_pct: last && Number(p.avg_price) > 0 ? (last.close / Number(p.avg_price) - 1) * 100 : null,
     });
   }
@@ -277,6 +288,7 @@ export async function getPortfolioOverview(portfolioId: string) {
     portfolio: pf,
     positions: enrichedPositions,
     transactions: txns ?? [],
+    fx_rate: fx,
     summary: {
       cash: Number(pf?.cash ?? 0),
       holdings,
