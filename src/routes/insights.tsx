@@ -1,11 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, TrendingUp, Database, BarChart3, Loader2, Play, Trophy } from "lucide-react";
+import { Sparkles, TrendingUp, Database, BarChart3, Loader2, Play, Trophy, Wallet } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
 import { SignalCard } from "@/components/kb/SignalCard";
+import { TermTooltip } from "@/components/kb/TermTooltip";
 import { getLatestSignalPerTicker, listSignals } from "@/lib/signals.functions";
 import { listFacts } from "@/lib/kb.functions";
 import { getBestScenarioCurve, getScenarios, runScenarios } from "@/lib/scenarios.functions";
+import { mddInKrw, usePlainMode } from "@/lib/plain-mode";
+import { Slider } from "@/components/ui/slider";
 import {
   Area,
   AreaChart,
