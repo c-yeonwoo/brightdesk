@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Activity, Briefcase, Database, Sparkles } from "lucide-react";
+import brightdeskLogo from "@/assets/brightdesk-logo.png";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCenter } from "./AlertCenter";
@@ -20,9 +21,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4 sm:gap-6 sm:px-6">
           <Link to="/" className="flex min-w-0 items-center gap-2">
-            <div
-              className="h-7 w-7 shrink-0 rounded-md"
-              style={{ background: "linear-gradient(135deg, var(--primary), var(--domain-theme))" }}
+            <img
+              src={brightdeskLogo}
+              alt="BrightDesk"
+              width={28}
+              height={28}
+              className="h-7 w-7 shrink-0"
             />
             <div className="flex min-w-0 flex-col leading-tight">
               <span className="text-sm font-semibold tracking-tight">BrightDesk</span>
