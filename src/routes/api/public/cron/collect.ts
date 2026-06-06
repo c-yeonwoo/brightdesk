@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 // Public cron endpoint — called hourly by pg_cron.
-// No signature verification yet (Phase 1): /api/public/* is auth-bypassed
-// and the only side effect is running the same logic the admin UI button runs.
+// Requires `x-cron-secret` header matching the CRON_SECRET project secret.
 export const Route = createFileRoute("/api/public/cron/collect")({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }) => {
+        const unauthorized = verifyCronSecret(request);
+        if (unauthorized) return unauthorized;
         const { runCollection, runRefiner } = await import("@/lib/collectors.server");
         const collected = await runCollection();
         const refined = await runRefiner(20);
@@ -18,7 +20,7 @@ export const Route = createFileRoute("/api/public/cron/collect")({
         });
       },
       GET: async () => {
-        return Response.json({ ok: true, hint: "POST to run" });
+        return Response.json({ ok: true, hint: "POST with x-cron-secret to run" });
       },
     },
   },
