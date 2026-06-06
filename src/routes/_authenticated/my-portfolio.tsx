@@ -13,7 +13,7 @@ import {
   listRecommendations,
 } from "@/lib/recommendations.functions";
 
-export const Route = createFileRoute("/my-portfolio")({
+export const Route = createFileRoute("/_authenticated/my-portfolio")({
   head: () => ({
     meta: [
       { title: "내 포트폴리오 · BrightDesk" },
