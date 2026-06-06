@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const DOMAINS = ["macro", "theme", "news", "politics"] as const;
-const SOURCES = ["broker_pdf", "mijueun_youtube", "snoomi_kakao", "news"] as const;
 
 export const getOverview = createServerFn({ method: "GET" }).handler(async () => {
   const { getKbClient } = await import("./kb-client.server");
@@ -51,21 +50,25 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
     };
   });
 
-  const bySource = SOURCES.map((s) => {
-    const rows = docs.filter((d) => d.source === s);
-    const avg =
-      rows.length > 0
-        ? rows.reduce((acc, r) => acc + (r.reliability ?? 0), 0) / rows.length
-        : 0;
-    const processed = rows.filter((r) => r.processed_at != null).length;
-    return {
-      source: s,
-      count: rows.length,
-      avgReliability: avg,
-      processed,
-      unprocessed: rows.length - processed,
-    };
-  });
+  const bySourceMap = new Map<
+    string,
+    { source: string; count: number; avgReliability: number; processed: number; unprocessed: number }
+  >();
+  for (const d of docs) {
+    const bucket = bySourceMap.get(d.source) ?? { source: d.source, count: 0, avgReliability: 0, processed: 0, unprocessed: 0 };
+    bucket.count += 1;
+    bucket.avgReliability += d.reliability ?? 0;
+    if (d.processed_at) bucket.processed += 1;
+    else bucket.unprocessed += 1;
+    bySourceMap.set(d.source, bucket);
+  }
+  const bySource = Array.from(bySourceMap.values())
+    .sort((a, b) => b.count - a.count)
+    .map((entry) => ({
+      ...entry,
+      avgReliability:
+        entry.count > 0 ? entry.avgReliability / entry.count : 0,
+    }));
 
   return {
     byDomain,
@@ -109,6 +112,31 @@ export const listFacts = createServerFn({ method: "GET" })
     return rows ?? [];
   });
 
+export const listFactsByIds = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        ids: z.array(z.string().uuid()),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { getKbClient } = await import("./kb-client.server");
+    const sb = getKbClient();
+
+    if (data.ids.length === 0) {
+      return [];
+    }
+
+    const { data: rows, error } = await sb
+      .from("kb_facts")
+      .select("id,title,summary,domain,reliability,sentiment,updated_at,related_tickers")
+      .in("id", data.ids)
+      .order("updated_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return rows ?? [];
+  });
+
 export const getFactDetail = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
@@ -139,7 +167,13 @@ export const listDocuments = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        source: z.enum(SOURCES).optional(),
+        source: z
+          .string()
+          .trim()
+          .min(1)
+          .max(96)
+          .regex(/^[a-z0-9._-]+$/i)
+          .optional(),
         processed: z.enum(["all", "yes", "no"]).optional(),
         q: z.string().optional(),
         from: z.string().optional(),
@@ -169,6 +203,27 @@ export const listDocuments = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return rows ?? [];
   });
+
+export const listSources = createServerFn({ method: "GET" }).handler(async () => {
+  const { getKbClient } = await import("./kb-client.server");
+  const sb = getKbClient();
+
+  const { data: rows, error } = await sb
+    .from("raw_documents")
+    .select("source");
+  if (error) throw new Error(error.message);
+
+  const counts = new Map<string, number>();
+  for (const row of rows ?? []) {
+    const source = (row as { source: string }).source?.trim();
+    if (!source) continue;
+    counts.set(source, (counts.get(source) ?? 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .map(([source, count]) => ({ source, count }))
+    .sort((a, b) => b.count - a.count);
+});
 
 export const getDocumentBody = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))

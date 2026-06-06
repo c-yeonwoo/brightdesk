@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Loader2, Play, RefreshCw, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Loader2, Play, RefreshCw, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
 import { DomainBadge } from "@/components/kb/DomainBadge";
 import {
@@ -9,8 +10,8 @@ import {
   triggerCollection,
   triggerRefiner,
 } from "@/lib/pipeline.functions";
-import { SOURCE_LABEL, relativeTime } from "@/lib/kb-format";
-import type { KbDomain, SourceType } from "@/lib/kb-client.server";
+import { formatSourceLabel, relativeTime } from "@/lib/kb-format";
+import type { KbDomain } from "@/lib/kb-client.server";
 
 export const Route = createFileRoute("/pipeline")({
   head: () => ({
@@ -31,6 +32,7 @@ export const Route = createFileRoute("/pipeline")({
 
 function PipelinePage() {
   const qc = useQueryClient();
+  const [mode, setMode] = useState<"user" | "operator">("user");
   const collect = useServerFn(triggerCollection);
   const refine = useServerFn(triggerRefiner);
   const status = useServerFn(getPipelineStatus);
@@ -50,6 +52,93 @@ function PipelinePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["pipeline-status"] }),
   });
 
+  const ops = data?.operations;
+  const successRate = ops?.cronSuccessRate24h ?? 0;
+  const successRateText = `${successRate.toFixed(1)}%`;
+
+  const namespaceRows = (ops?.namespaces ?? []) as Array<{
+    namespace: string;
+    total: number;
+    success: number;
+    failed: number;
+    running: number;
+    successRate: number;
+    avgDurationMs: number | null;
+    p95DurationMs: number | null;
+  }>;
+
+  const labelOfNamespace = (namespace: string) => {
+    if (namespace === "cron.collect") return "collect 파이프라인";
+    if (namespace === "cron.hourly-rebalance") return "hourly-rebalance";
+    return namespace;
+  };
+
+  const formatDuration = (valueMs: number | null) => {
+    if (!valueMs || valueMs <= 0) return "—";
+    const sec = valueMs / 1000;
+    return `${Math.round(sec * 10) / 10}s`;
+  };
+
+  const alerts: { level: "warn" | "danger"; text: string }[] = [];
+  if ((ops?.cronRunning24h ?? 0) > 0) {
+    alerts.push({ level: "warn", text: `현재 실행 중인 작업 ${ops?.cronRunning24h}건(대기 없이 정상 진행 중)` });
+  }
+  if ((ops?.queueLength ?? 0) >= 150) {
+    alerts.push({ level: "danger", text: "미처리 원본 큐가 150개를 초과해 파이프라인 지연 위험입니다." });
+  }
+  if (successRate < 95) {
+    alerts.push({ level: "danger", text: "24시간 크론 성공률이 95% 미만입니다." });
+  }
+  if ((ops?.cronFailureAll ?? 0) >= 20) {
+    alerts.push({ level: "warn", text: `누적 크론 실패가 ${ops?.cronFailureAll}건입니다. 운영 확인 필요` });
+  }
+  for (const n of namespaceRows as Array<{ namespace: string; p95DurationMs: number | null }>) {
+    if ((n.p95DurationMs ?? 0) >= 240_000) {
+      alerts.push({
+        level: "danger",
+        text: `${labelOfNamespace(n.namespace)} 24h p95 실행시간이 ${formatDuration(n.p95DurationMs)}로 임계치 초과`,
+      });
+    } else if ((n.p95DurationMs ?? 0) >= 120_000) {
+      alerts.push({
+        level: "warn",
+        text: `${labelOfNamespace(n.namespace)} 24h p95 실행시간이 ${formatDuration(n.p95DurationMs)} 이상입니다.`,
+      });
+    }
+  }
+
+  const escalations = (ops?.escalations ?? []) as Array<{
+    namespace: string;
+    status: string;
+    runKey: string | null;
+    startedAt: string | null;
+    errorMessage: string | null;
+    consecutiveFailures: number;
+    threshold: number;
+    isEscalated: boolean;
+  }>;
+
+  for (const item of escalations.filter((item) => item.isEscalated)) {
+    alerts.push({
+      level: "danger",
+      text: `${item.namespace} 연속 실패 ${item.consecutiveFailures}/${item.threshold} 도달 (run ${item.runKey ?? "-"}, status ${item.status})`,
+    });
+  }
+
+  const namespaceRateText = (n: { successRate: number }) => `${n.successRate.toFixed(1)}%`;
+  const namespaceHealth = (n: {
+    failed: number;
+    running: number;
+    successRate: number;
+    total: number;
+  }) => {
+    if (n.failed > 0) return "Failure";
+    if (n.running > 0) return "Running";
+    if (n.total === 0) return "No Data";
+    return "Stable";
+  };
+
+  const escalationByNamespace = Object.fromEntries(escalations.map((item) => [item.namespace, item]));
+
   return (
     <AppShell>
       <div className="mb-6 flex items-end justify-between">
@@ -68,7 +157,67 @@ function PipelinePage() {
         </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="mb-4 flex items-center gap-2">
+        <button
+          onClick={() => setMode("user")}
+          className={`rounded-full border px-3 py-1 text-xs ${mode === "user" ? "bg-foreground text-background" : "bg-card text-foreground hover:bg-muted"}`}
+        >
+          사용자 모드
+        </button>
+        <button
+          onClick={() => setMode("operator")}
+          className={`rounded-full border px-3 py-1 text-xs ${mode === "operator" ? "bg-foreground text-background" : "bg-card text-foreground hover:bg-muted"}`}
+        >
+          운영자 모드
+        </button>
+      </div>
+
+      {alerts.length > 0 && (
+        <div className="mb-3 space-y-2">
+          {alerts.map((alert, idx) => {
+            const levelClass =
+              alert.level === "danger"
+                ? "border-destructive/40 bg-destructive/5 text-destructive"
+                : "border-amber-500/40 bg-amber-500/5 text-amber-700";
+            return (
+              <div key={idx} className={`rounded-xl border p-3 text-xs ${levelClass}`}>
+                <div className="inline-flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {alert.text}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border bg-card p-5">
+          <div className="text-xs text-muted-foreground">큐 길이</div>
+          <div className="mt-2 text-3xl font-semibold tabular-nums">
+            {isLoading ? "—" : ops?.queueLength ?? 0}
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">raw_documents 처리 대기</div>
+        </div>
+
+        <div className="rounded-xl border bg-card p-5">
+          <div className="text-xs text-muted-foreground">24시간 크론 성공률</div>
+          <div className="mt-2 text-3xl font-semibold tabular-nums">
+            {isLoading ? "—" : successRateText}
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            성공 {ops?.cronSuccess24h ?? 0} / 실행 {ops?.cronTotal24h ?? 0}
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-card p-5">
+          <div className="text-xs text-muted-foreground">누적 크론 실패</div>
+          <div className="mt-2 text-3xl font-semibold tabular-nums">
+            {isLoading ? "—" : ops?.cronFailureAll ?? 0}
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">전체 실패 이력</div>
+        </div>
+
         <div className="rounded-xl border bg-card p-5">
           <div className="text-xs text-muted-foreground">미처리 원본</div>
           <div className="mt-2 text-3xl font-semibold tabular-nums">
@@ -78,7 +227,9 @@ function PipelinePage() {
             processed_at = NULL 인 raw_documents
           </div>
         </div>
+      </div>
 
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
         <button
           onClick={() => collectMut.mutate()}
           disabled={collectMut.isPending}
@@ -109,7 +260,7 @@ function PipelinePage() {
         <button
           onClick={() => refineMut.mutate()}
           disabled={refineMut.isPending}
-          className="rounded-xl border bg-card p-5 text-left transition-colors hover:bg-muted disabled:opacity-60"
+          className={`rounded-xl border bg-card p-5 text-left transition-colors hover:bg-muted disabled:opacity-60 ${mode === "user" ? "hidden" : ""}`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">2. LLM 정제</span>
@@ -134,14 +285,52 @@ function PipelinePage() {
         </button>
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      {mode === "operator" && (
+        <>
+          {namespaceRows.map((n) => (
+            <div key={n.namespace} className="rounded-xl border bg-card p-5">
+              <div className="text-xs text-muted-foreground">{labelOfNamespace(n.namespace)}</div>
+              <div className="mt-2 flex items-baseline gap-2 text-xl font-semibold tabular-nums">
+                <span>{namespaceRateText(n)}</span>
+                {n.running > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    실행 {n.running}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                성공 {n.success} / 실패 {n.failed} / 총 {n.total}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                최근 실행시간 avg/p95: {formatDuration(n.avgDurationMs)} / {formatDuration(n.p95DurationMs)}
+              </div>
+              <div className="mt-2 text-[11px] text-muted-foreground">
+                상태 {namespaceHealth(n)}
+              </div>
+              {escalationByNamespace[n.namespace] ? (
+                <div className="mt-2 text-[11px] text-amber-600">
+                  연속 실패 {escalationByNamespace[n.namespace].consecutiveFailures}/
+                  {escalationByNamespace[n.namespace].threshold}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </>
+      )}
+
+      {!isLoading && mode === "user" && alerts.length > 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">운영 모드에서 실패 히스토리/연속 오류 세부를 확인하세요.</p>
+      )}
+
+      <div className={`mt-6 grid gap-4 lg:grid-cols-2 ${mode === "user" ? "hidden" : "grid"}`}>
         <div className="rounded-xl border bg-card p-5">
           <h2 className="mb-3 text-sm font-semibold">최근 수집 원본 (15)</h2>
           <div className="divide-y">
             {(data?.recentDocs ?? []).map((d: any) => (
               <div key={d.id} className="flex items-center gap-3 py-2.5">
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {SOURCE_LABEL[d.source as SourceType] ?? d.source}
+                  {formatSourceLabel(d.source as string)}
                 </span>
                 <span className="flex-1 truncate text-sm">{d.title ?? "(제목 없음)"}</span>
                 <span
@@ -188,11 +377,11 @@ function PipelinePage() {
         </div>
       </div>
 
-      <div className="mt-6 rounded-xl border bg-card p-5">
+      <div className={`mt-6 rounded-xl border bg-card p-5 ${mode === "user" ? "hidden" : "block"}`}>
         <h2 className="mb-2 text-sm font-semibold">자동 실행 (cron)</h2>
         <p className="text-xs text-muted-foreground">
-          매 시간 정각 <code className="rounded bg-muted px-1">POST /api/public/cron/collect</code>{" "}
-          호출 → 수집 + 최대 20건 정제. pg_cron 잡 이름:{" "}
+          매 시간 정각 <code className="rounded bg-muted px-1">POST /api/public/cron/collect</code> (헤더: <code className="rounded bg-muted px-1">X-BRIGHTDESK-CRON-TOKEN</code>)
+          호출 → 수집 + 최대 20건 정제. pg_cron 잡 이름: {" "}
           <code className="rounded bg-muted px-1">kb-hourly-collect</code>.
         </p>
       </div>

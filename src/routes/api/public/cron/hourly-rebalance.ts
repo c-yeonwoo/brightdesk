@@ -1,97 +1,251 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { verifyCronSecret } from "@/lib/cron-auth";
+import { finalizeCronRun, registerCronRun, requireCronRequest } from "@/lib/cron.server";
 
 // 1시간마다 자동 실행: 수집 → 시그널 생성 → 레짐 점검 → SL/TP 청산 → Track A 자동 운용 → 스냅샷.
-// Requires `x-cron-secret` header matching the CRON_SECRET project secret.
+type RetryResult<T> = {
+  value: T | null;
+  attempts: number;
+  retried: boolean;
+  error?: string;
+};
+
+function parsePositiveInt(raw: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(raw ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+async function runWithRetry<T>(
+  fn: () => Promise<T>,
+  attempts: number,
+  delayMs: number,
+): Promise<RetryResult<T>> {
+  let attempt = 0;
+  let lastError = "cron 단계 실패";
+
+  while (attempt < attempts) {
+    attempt += 1;
+    try {
+      const value = await fn();
+      return {
+        value,
+        attempts: attempt,
+        retried: attempt > 1,
+      };
+    } catch (error: any) {
+      lastError = error?.message ?? String(error);
+      if (attempt >= attempts) break;
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+      }
+    }
+  }
+
+  return {
+    value: null,
+    attempts,
+    retried: attempts > 1,
+    error: lastError,
+  };
+}
+
 export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        const unauthorized = verifyCronSecret(request);
-        if (unauthorized) return unauthorized;
-        const start = Date.now();
+      POST: async () => {
+        const startedAt = Date.now();
+        requireCronRequest();
+        const { runKey, isDuplicate } = await registerCronRun("cron.hourly-rebalance", {
+          windowMinutes: 60,
+        });
+
+        if (isDuplicate) {
+          return Response.json({ ok: false, skipped: true, runKey });
+        }
+
+        const baseAttempts = parsePositiveInt(process.env.BRIGHTDESK_CRON_RETRY_ATTEMPTS, 1);
+        const baseDelayMs = parsePositiveInt(process.env.BRIGHTDESK_CRON_RETRY_DELAY_MS, 10_000);
+        const tradeSafeAttempts = parsePositiveInt(
+          process.env.BRIGHTDESK_HOURLY_REBALANCE_RETRY_ATTEMPTS ?? `${baseAttempts}`,
+          baseAttempts,
+        );
+        const tradeSafeDelayMs = parsePositiveInt(
+          process.env.BRIGHTDESK_HOURLY_REBALANCE_RETRY_DELAY_MS ?? `${baseDelayMs}`,
+          baseDelayMs,
+        );
+
         const log: Record<string, any> = {};
+        let failed = false;
+        const retryMeta: Record<string, any> = {};
 
-        try {
-          const { runCollection, runRefiner } = await import("@/lib/collectors.server");
-          log.collected = await runCollection();
-          log.refined = await runRefiner(20);
-        } catch (e: any) {
-          log.collect_error = e?.message ?? String(e);
+        // 1) 수집/정제(재시도 허용)
+        const collectResult = await runWithRetry(
+          async () => {
+            const { runCollection, runRefiner } = await import("@/lib/collectors.server");
+            const collected = await runCollection();
+            const refined = await runRefiner(20);
+            return { collected, refined };
+          },
+          tradeSafeAttempts,
+          tradeSafeDelayMs,
+        );
+
+        retryMeta.collect = { attempts: collectResult.attempts, retried: collectResult.retried };
+        if (collectResult.value) {
+          log.collected = collectResult.value.collected;
+          log.refined = collectResult.value.refined;
+        } else {
+          failed = true;
+          log.collect_error = `${collectResult.error} (attempt ${collectResult.attempts}/${tradeSafeAttempts})`;
         }
 
-        // 환율(USD/KRW) 갱신 — 미국주 KRW 환산용
-        try {
-          const { refreshFxHistory } = await import("@/lib/fx.server");
-          log.fx = await refreshFxHistory();
-        } catch (e: any) {
-          log.fx_error = e?.message ?? String(e);
+        // 2) 환율 갱신(재시도 허용)
+        const fxResult = await runWithRetry(
+          async () => {
+            const { refreshFxHistory } = await import("@/lib/fx.server");
+            return refreshFxHistory();
+          },
+          tradeSafeAttempts,
+          tradeSafeDelayMs,
+        );
+
+        retryMeta.fx = { attempts: fxResult.attempts, retried: fxResult.retried };
+        if (fxResult.value !== null) {
+          log.fx = fxResult.value;
+        } else {
+          failed = true;
+          log.fx_error = `${fxResult.error} (attempt ${fxResult.attempts}/${tradeSafeAttempts})`;
         }
 
-        try {
-          const { generateSignalsForAll } = await import("@/lib/signals.server");
-          log.signals = await generateSignalsForAll();
-        } catch (e: any) {
-          log.signals_error = e?.message ?? String(e);
+        // 3) 시그널 생성(재시도 허용)
+        const signalsResult = await runWithRetry(
+          async () => {
+            const { generateSignalsForAll } = await import("@/lib/signals.server");
+            return generateSignalsForAll();
+          },
+          tradeSafeAttempts,
+          tradeSafeDelayMs,
+        );
+
+        retryMeta.signals = { attempts: signalsResult.attempts, retried: signalsResult.retried };
+        if (signalsResult.value !== null) {
+          log.signals = signalsResult.value;
+        } else {
+          failed = true;
+          log.signals_error = `${signalsResult.error} (attempt ${signalsResult.attempts}/${tradeSafeAttempts})`;
         }
 
-        // 시장 레짐 평가 (BUY 신뢰도 보정에 사용)
+        // 4) 시장 레짐 평가(재시도 허용)
         let regime: any = null;
-        try {
-          const { getMarketRegime } = await import("@/lib/regime.server");
-          regime = await getMarketRegime("^KS11");
-          log.regime = { kind: regime.regime, score: regime.score, mult: regime.confidence_multiplier };
-        } catch (e: any) {
-          log.regime_error = e?.message ?? String(e);
+        const regimeResult = await runWithRetry(
+          async () => {
+            const { getMarketRegime } = await import("@/lib/regime.server");
+            regime = await getMarketRegime("^KS11");
+            return { regime };
+          },
+          tradeSafeAttempts,
+          tradeSafeDelayMs,
+        );
+
+        retryMeta.regime = { attempts: regimeResult.attempts, retried: regimeResult.retried };
+        if (regimeResult.value !== null && regimeResult.value.regime) {
+          log.regime = {
+            kind: regime.regime,
+            score: regime.score,
+            mult: regime.confidence_multiplier,
+          };
+        } else {
+          failed = true;
+          log.regime_error = `${regimeResult.error} (attempt ${regimeResult.attempts}/${tradeSafeAttempts})`;
         }
 
-        try {
-          const {
-            getOrCreateSystemPortfolio,
-            applyAllRecentSignals,
-            snapshotPortfolio,
-            executeSignal,
-          } = await import("@/lib/portfolio.server");
-          const { checkExits, serializeSellReason } = await import("@/lib/risk.server");
-          const pf = await getOrCreateSystemPortfolio();
+        // 5) 트레이드 적용 및 스냅샷(실제 side-effect로 재시도 비권장)
+        if (!failed) {
+          try {
+            const {
+              getOrCreateSystemPortfolio,
+              applyAllRecentSignals,
+              snapshotPortfolio,
+              executeSignal,
+            } = await import("@/lib/portfolio.server");
+            const { checkExits, serializeSellReason } = await import("@/lib/risk.server");
+            const pf = await getOrCreateSystemPortfolio();
 
-          // 1) 손절/익절 자동 청산 — sell_reason 라벨을 note로 동봉
-          const exits = await checkExits(pf.id);
-          const exitResults: any[] = [];
-          for (const e of exits) {
-            if (!e.triggered || !e.reason) continue;
-            const r = await executeSignal({
-              portfolioId: pf.id,
-              ticker: e.ticker,
-              kind: "SELL",
-              signalDate: new Date().toISOString(),
-              note: serializeSellReason(e.reason, e.message),
+            const exits = await checkExits(pf.id);
+            const exitResults: any[] = [];
+            for (const e of exits) {
+              if (!e.triggered || !e.reason) continue;
+              const r = await executeSignal({
+                portfolioId: pf.id,
+                ticker: e.ticker,
+                kind: "SELL",
+                signalDate: new Date().toISOString(),
+                note: serializeSellReason(e.reason, e.message),
+              } as any);
+              exitResults.push({ ticker: e.ticker, reason: e.reason, ...r });
+            }
+            log.exits = { checked: exits.length, executed: exitResults.length, results: exitResults };
+
+            log.applied = await applyAllRecentSignals(pf.id, 2, {
+              blockBuys: regime?.regime === "BEAR",
+              confidenceMultiplier: regime?.confidence_multiplier ?? 1,
             } as any);
-            exitResults.push({ ticker: e.ticker, reason: e.reason, ...r });
+            log.snapshot = await snapshotPortfolio(pf.id);
+          } catch (e: any) {
+            failed = true;
+            log.trade_error = e?.message ?? String(e);
           }
-          log.exits = { checked: exits.length, executed: exitResults.length, results: exitResults };
+        } else {
+          log.trade_skipped = true;
+          log.trade_skip_reason = "preflight_failures_detected";
+          log.outcomes_skipped = true;
+          log.outcomes_skip_reason = "preflight_failures_detected";
+        }
 
-          // 2) 일반 시그널 적용 (BEAR 레짐이면 신규 BUY 차단)
-          log.applied = await applyAllRecentSignals(pf.id, 2, {
-            blockBuys: regime?.regime === "BEAR",
-            confidenceMultiplier: regime?.confidence_multiplier ?? 1,
-          } as any);
-          log.snapshot = await snapshotPortfolio(pf.id);
-        } catch (e: any) {
-          log.trade_error = e?.message ?? String(e);
+        // 6) 성과 산정(신규 평가 기준이 선행 단계를 의존)
+        if (!failed) {
+          try {
+            const { evaluateSignalOutcomes } = await import("@/lib/outcomes.server");
+            log.outcomes = await evaluateSignalOutcomes(50);
+          } catch (e: any) {
+            failed = true;
+            log.outcomes_error = e?.message ?? String(e);
+          }
         }
 
         try {
-          const { evaluateSignalOutcomes } = await import("@/lib/outcomes.server");
-          log.outcomes = await evaluateSignalOutcomes(50);
-        } catch (e: any) {
-          log.outcomes_error = e?.message ?? String(e);
+          await finalizeCronRun(
+            runKey,
+            failed ? "failed" : "success",
+            failed ? `Hourly-rebalance preflight/trade check failed (retry plan: attempts=${tradeSafeAttempts})` : undefined,
+            "cron.hourly-rebalance",
+            Date.now() - startedAt,
+          );
+        } catch (e) {
+          failed = true;
+          log.finalize_error = e instanceof Error ? e.message : String(e);
+        }
+
+        if (failed) {
+          return Response.json(
+            {
+              ok: false,
+              skipped: false,
+              runKey,
+              ts: new Date().toISOString(),
+              duration_ms: Date.now() - startedAt,
+              retry_meta: retryMeta,
+              ...log,
+            },
+            { status: 500 },
+          );
         }
 
         return Response.json({
           ok: true,
+          runKey,
           ts: new Date().toISOString(),
-          duration_ms: Date.now() - start,
+          duration_ms: Date.now() - startedAt,
+          retry_meta: retryMeta,
           ...log,
         });
       },

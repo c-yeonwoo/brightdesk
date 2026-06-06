@@ -4,7 +4,7 @@ export function getKbClient() {
   return supabaseAdmin;
 }
 
-export type SourceType = "broker_pdf" | "mijueun_youtube" | "snoomi_kakao" | "news";
+export type SourceType = string;
 export type KbDomain = "macro" | "theme" | "news" | "politics";
 
 export interface RawDocument {

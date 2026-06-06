@@ -1,9 +1,27 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getBestScenario, listScenarios, runAllScenarios, simulateScenarioCurve } from "./scenarios.server";
+import { z } from "zod";
+import {
+  getBestScenario,
+  getLatestScenarioRun,
+  getScenarioRunById,
+  listScenarios,
+  runAllScenariosAsync,
+  simulateScenarioCurve,
+} from "./scenarios.server";
 
 export const runScenarios = createServerFn({ method: "POST" }).handler(async () => {
-  return runAllScenarios();
+  return runAllScenariosAsync();
 });
+
+export const getLatestScenarioRunInfo = createServerFn({ method: "GET" }).handler(async () => {
+  return getLatestScenarioRun();
+});
+
+export const getScenarioRunInfo = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => z.object({ runId: z.string().uuid() }).parse(d ?? {}))
+  .handler(async ({ data }) => {
+    return getScenarioRunById(data.runId);
+  });
 
 export const getScenarios = createServerFn({ method: "GET" }).handler(async () => {
   return listScenarios();

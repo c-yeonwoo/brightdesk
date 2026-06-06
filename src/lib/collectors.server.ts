@@ -1,9 +1,12 @@
-// Server-only: data collectors for the 4 sources.
+// Server-only: data collectors for RSS/API sources.
 // Each collector produces RawDocument candidates; orchestrator dedupes by content_hash.
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { createHash } from "crypto";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-export type SourceType = "broker_pdf" | "mijueun_youtube" | "snoomi_kakao" | "news";
+export type SourceType = string;
+
+type CollectorKind = "rss";
+type RefinerPromptProfile = "kb-facts-v1" | "kb-facts-v2";
 
 export interface RawDocCandidate {
   source: SourceType;
@@ -15,10 +18,49 @@ export interface RawDocCandidate {
   meta?: Record<string, unknown>;
 }
 
-export interface Collector {
+export interface CollectorStrategy {
   source: SourceType;
+  isEnabled(): boolean;
   fetch(): Promise<RawDocCandidate[]>;
 }
+
+export interface CollectorConfig {
+  displayName: string;
+  kind: CollectorKind;
+  source: SourceType;
+  feedEnvKey: string;
+  reliability: number;
+  limit: number;
+  bodySuffix?: string;
+  parserVersion?: RefinerPromptProfile;
+  parser?: (item: ParsedFeedItem, feedUrl: string, index: number) => RawDocCandidate;
+}
+
+export interface CollectorFactory {
+  build(config: CollectorConfig): CollectorStrategy;
+}
+
+export interface SourceProfile {
+  source: SourceType;
+  displayName: string;
+  kind: CollectorKind;
+  enabled: boolean;
+  reliability: number;
+  limit: number;
+  parserVersion: RefinerPromptProfile;
+}
+
+const rssCollectorFactory: CollectorFactory = {
+  build: createRssCollector,
+};
+
+type ParsedFeedItem = {
+  title: string;
+  link: string | null;
+  body: string;
+  publishedAt: string;
+  externalId: string;
+};
 
 function hashOf(c: RawDocCandidate) {
   return createHash("sha256")
@@ -26,91 +68,254 @@ function hashOf(c: RawDocCandidate) {
     .digest("hex");
 }
 
-// ---------- Mock collectors (Phase 1 skeleton) ----------
-// Replace fetch() implementations with real Playwright / RSS / PDF / YouTube fetchers later.
-
-const sampleTickers = ["005930", "000660", "035720", "035420", "207940", "AAPL", "NVDA", "TSLA"];
-const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
-
-function nowMinus(minutes: number) {
-  return new Date(Date.now() - minutes * 60_000).toISOString();
+function safeText(input: string | null | undefined) {
+  return (input ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-const brokerPdf: Collector = {
-  source: "broker_pdf",
-  async fetch() {
-    const t = pick(sampleTickers);
-    return [
-      {
-        source: "broker_pdf",
-        external_id: `broker-${Date.now()}`,
-        title: `[증권사 리포트] ${t} 목표주가 상향`,
-        body: `${t} 관련 증권사 분석 요약. 실적 가이던스 상회, 목표주가 상향. AI 수요 견조, 마진 개선 기대. 매수 의견 유지.`,
-        published_at: nowMinus(30),
-        reliability: 0.85,
-        meta: { synthetic: true, ticker: t },
-      },
-    ];
-  },
-};
+function normalizeDate(value: string | null | undefined) {
+  if (!value) return new Date().toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+}
 
-const mijueun: Collector = {
-  source: "mijueun_youtube",
-  async fetch() {
-    return [
-      {
-        source: "mijueun_youtube",
-        external_id: `miju-${Date.now()}`,
-        title: "미주은 데일리: 빅테크 실적 시즌 점검",
-        body: "엔비디아 데이터센터 매출 강세 지속. 애플 서비스 부문 견조. 테슬라 자율주행 마진 압박 지속.",
-        published_at: nowMinus(60),
-        reliability: 0.6,
-        meta: { synthetic: true, channel: "mijueun" },
-      },
-    ];
-  },
-};
+function extractTag(raw: string, tag: string): string | null {
+  const pattern = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
+  const match = raw.match(pattern);
+  if (!match?.[1]) return null;
+  return safeText(match[1].replace(/<!\[CDATA\[(.*?)\]\]>/gs, "$1"));
+}
 
-const snoomi: Collector = {
-  source: "snoomi_kakao",
-  async fetch() {
-    const t = pick(sampleTickers);
-    return [
-      {
-        source: "snoomi_kakao",
-        external_id: `snoomi-${Date.now()}`,
-        title: `[스누미 단체방] ${t} 단기 모멘텀 언급`,
-        body: `${t} 거래량 급증, 단기 모멘텀 발생. 차트 상 골든크로스 임박. 다만 분할 매수 의견.`,
-        published_at: nowMinus(15),
-        reliability: 0.4,
-        meta: { synthetic: true, room: "snoomi-main", ticker: t },
-      },
-    ];
-  },
-};
+function extractLink(raw: string): string | null {
+  const href = raw.match(/<link\\b[^>]*\\bhref=["']([^"']+)["'][^>]*>/i)?.[1];
+  if (href) return href;
+  return extractTag(raw, "link");
+}
 
-const news: Collector = {
-  source: "news",
-  async fetch() {
-    return [
-      {
-        source: "news",
-        external_id: `news-${Date.now()}`,
-        title: "美 연준, 9월 금리 동결 시사 — 시장 안도",
-        body: "FOMC 위원들이 추가 인상에 신중한 입장을 보이며 시장은 안도. 반도체·성장주 상승 흐름. 10년물 국채금리 하락.",
-        published_at: nowMinus(10),
-        reliability: 0.75,
-        meta: { synthetic: true, outlet: "demo-wire" },
-      },
-    ];
-  },
-};
+function collectBlocks(raw: string, tagName: string) {
+  const regex = new RegExp(`<${tagName}\\b[^>]*>[\\s\\S]*?<\\/${tagName}>`, "gi");
+  return raw.match(regex) ?? [];
+}
 
-export const collectors: Collector[] = [brokerPdf, mijueun, snoomi, news];
+function parseFeedItems(raw: string): ParsedFeedItem[] {
+  const itemBlocks = collectBlocks(raw, "item");
+  const blocks = itemBlocks.length > 0 ? itemBlocks : collectBlocks(raw, "entry");
+  const parsed: ParsedFeedItem[] = [];
+  const seen = new Set<string>();
+
+  for (const block of blocks) {
+    const title = safeText(extractTag(block, "title"));
+    const link = extractLink(block);
+    const body = safeText(
+      extractTag(block, "description") ??
+        extractTag(block, "summary") ??
+        extractTag(block, "content") ??
+        extractTag(block, "content:encoded") ??
+        "",
+    );
+    const publishedAt = normalizeDate(
+      extractTag(block, "pubDate") || extractTag(block, "published") || extractTag(block, "updated"),
+    );
+    const externalId =
+      extractTag(block, "id") || extractTag(block, "guid") || link || `${title}-${publishedAt}`;
+
+    if (!title) continue;
+    const key = `${externalId}::${title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parsed.push({
+      title,
+      link,
+      body: body || title,
+      publishedAt,
+      externalId,
+    });
+  }
+
+  return parsed;
+}
+
+async function fetchFeedText(url: string, source: SourceType): Promise<string> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 12_000);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "BrightDesk-Collector/1.0",
+        "Accept": "application/xml, text/xml, */*",
+      },
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`${source} feed request failed: ${res.status} ${res.statusText}`);
+    }
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function toInt(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function defaultParser(
+  source: SourceType,
+  item: ParsedFeedItem,
+  feedUrl: string,
+  idx: number,
+  options: { bodySuffix?: string; reliability: number },
+): RawDocCandidate {
+  return {
+    source,
+    external_id: `${source}-${item.externalId}-${idx}`,
+    title: item.title,
+    body: `${item.body}${options.bodySuffix ? `\n\n${options.bodySuffix}` : ""}`.trim(),
+    published_at: item.publishedAt,
+    reliability: options.reliability,
+    meta: { source_url: feedUrl, remote_link: item.link },
+  };
+}
+
+class RssCollectorStrategy implements CollectorStrategy {
+  constructor(private readonly cfg: CollectorConfig) {}
+
+  private get url() {
+    return process.env[this.cfg.feedEnvKey] ?? null;
+  }
+
+  get source() {
+    return this.cfg.source;
+  }
+
+  isEnabled() {
+    return Boolean(this.url);
+  }
+
+  async fetch(): Promise<RawDocCandidate[]> {
+    if (!this.url) return [];
+
+    const text = await fetchFeedText(this.url, this.source);
+    const limit = toInt(process.env[`${this.cfg.feedEnvKey}_LIMIT`], this.cfg.limit);
+    const parser = this.cfg.parser ?? ((item, feedUrl, idx) =>
+      defaultParser(this.source, item, feedUrl, idx, {
+        bodySuffix: this.cfg.bodySuffix,
+        reliability: clamp01(this.cfg.reliability, 0.5),
+      })
+    );
+
+    return parseFeedItems(text).slice(0, limit).map((item, idx) => {
+      const candidate = parser(item, this.url!, idx);
+      return {
+        ...candidate,
+        reliability: clamp01(candidate.reliability, this.cfg.reliability),
+      };
+    });
+  }
+}
+
+export function createRssCollector(cfg: CollectorConfig): CollectorStrategy {
+  return new RssCollectorStrategy(cfg);
+}
+
+function buildCollectors(
+  configs: CollectorConfig[],
+  factory: CollectorFactory = rssCollectorFactory,
+) {
+  return configs.map((cfg) => factory.build(cfg));
+}
+
+const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
+  {
+    displayName: "브로커 리포트 RSS",
+    kind: "rss",
+    source: "broker_pdf",
+    feedEnvKey: "BRIGHTDESK_BROKER_PDF_RSS_URL",
+    reliability: 0.85,
+    bodySuffix: "source=broadcast-pdf",
+    limit: 4,
+    parserVersion: "kb-facts-v1",
+  },
+  {
+    displayName: "미주은 유튜브 RSS",
+    kind: "rss",
+    source: "mijueun_youtube",
+    feedEnvKey: "BRIGHTDESK_MIJUEUN_YT_RSS_URL",
+    reliability: 0.6,
+    bodySuffix: "source=mijueun-youtube",
+    limit: 5,
+    parserVersion: "kb-facts-v1",
+  },
+  {
+    displayName: "스누미 카카오 RSS",
+    kind: "rss",
+    source: "snoomi_kakao",
+    feedEnvKey: "BRIGHTDESK_SNOOMI_RSS_URL",
+    reliability: 0.4,
+    bodySuffix: "source=snoomi-kakao",
+    limit: 5,
+    parserVersion: "kb-facts-v1",
+  },
+  {
+    displayName: "뉴스 RSS",
+    kind: "rss",
+    source: "news",
+    feedEnvKey: "BRIGHTDESK_NEWS_RSS_URL",
+    reliability: 0.75,
+    bodySuffix: "source=external-news",
+    limit: 8,
+    parserVersion: "kb-facts-v1",
+  },
+];
+
+export const collectors: CollectorStrategy[] = buildCollectors(DEFAULT_COLLECTOR_CONFIGS, rssCollectorFactory);
+
+export function getCollectorProfiles(): SourceProfile[] {
+  return DEFAULT_COLLECTOR_CONFIGS.map((cfg) => ({
+    source: cfg.source,
+    displayName: cfg.displayName,
+    kind: cfg.kind,
+    enabled: Boolean(process.env[cfg.feedEnvKey]),
+    reliability: cfg.reliability,
+    limit: toInt(process.env[`${cfg.feedEnvKey}_LIMIT`], cfg.limit),
+    parserVersion: cfg.parserVersion ?? "kb-facts-v1",
+  }));
+}
+
+function getCollectorProfile(source: string) {
+  return getCollectorProfiles().find((item) => item.source === source);
+}
+
+export function registerCollector<T extends SourceType>(
+  collector: CollectorStrategy & { source: T },
+  registry: CollectorStrategy[] = collectors,
+) {
+  return [...registry, collector];
+}
+
+export function getDefaultCollectors(): CollectorStrategy[] {
+  return [...collectors];
+}
+
+function clamp01(value: number, fallback: number) {
+  const safe = Number.isFinite(value) ? value : fallback;
+  return Math.max(0, Math.min(1, safe));
+}
 
 // ---------- Orchestration ----------
 
-export async function runCollection(): Promise<{
+export async function runCollection(params?: {
+  collectors?: CollectorStrategy[];
+}): Promise<{
   collected: number;
   inserted: number;
   skipped: number;
@@ -121,7 +326,13 @@ export async function runCollection(): Promise<{
   let inserted = 0;
   let skipped = 0;
 
-  for (const c of collectors) {
+  const targetCollectors = params?.collectors ?? collectors;
+  const active = targetCollectors.filter((c) => c.isEnabled());
+  if (active.length === 0) {
+    return { collected, inserted, skipped, bySource };
+  }
+
+  for (const c of active) {
     bySource[c.source] = { inserted: 0, skipped: 0 };
     let docs: RawDocCandidate[] = [];
     try {
@@ -133,6 +344,7 @@ export async function runCollection(): Promise<{
     collected += docs.length;
 
     for (const d of docs) {
+      const sourceProfile = getCollectorProfile(d.source);
       const content_hash = hashOf(d);
       // dedupe by content_hash
       const { data: existing } = await supabaseAdmin
@@ -156,6 +368,8 @@ export async function runCollection(): Promise<{
         reliability: d.reliability,
         published_at: d.published_at,
         meta: (d.meta ?? {}) as any,
+        source_profile_key: d.source,
+        pipeline_version: sourceProfile?.parserVersion ?? "kb-facts-v1",
       });
       if (error) {
         console.error(`[collector:${c.source}] insert error`, error.message);
@@ -171,8 +385,10 @@ export async function runCollection(): Promise<{
 
 // ---------- LLM refiner (Phase 2) ----------
 
+type FactDomain = "macro" | "theme" | "news" | "politics";
+
 interface ExtractedFact {
-  domain: "macro" | "theme" | "news" | "politics";
+  domain: FactDomain;
   fact_key: string; // stable slug
   title: string;
   summary: string;
@@ -207,6 +423,58 @@ async function callLovableAI(systemPrompt: string, userPrompt: string): Promise<
   return j.choices?.[0]?.message?.content ?? "";
 }
 
+function clampPositive(v: unknown, min: number, max: number, fallback: number) {
+  if (typeof v !== "number" || Number.isNaN(v) || !Number.isFinite(v)) return fallback;
+  return Math.max(min, Math.min(max, v));
+}
+
+function safeParseFactList(raw: string): ExtractedFact[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const fenced = raw.match(/```json([\s\S]*?)```/i)?.[1]?.trim();
+    if (!fenced) throw new Error("AI 응답 JSON 파싱 실패");
+    parsed = JSON.parse(fenced);
+  }
+
+  const data = parsed as { facts?: unknown[] };
+  if (!data || !Array.isArray(data.facts)) throw new Error("AI 응답 JSON 스키마 오류");
+
+  const valid: ExtractedFact[] = [];
+  const seen = new Set<string>();
+
+  for (const row of data.facts) {
+    if (!row || typeof row !== "object") continue;
+    const x = row as Record<string, unknown>;
+    const domain = typeof x.domain === "string" ? x.domain.trim() : "";
+    if (!["macro", "theme", "news", "politics"].includes(domain)) continue;
+    const fact_key = typeof x.fact_key === "string" ? x.fact_key.trim() : "";
+    const title = typeof x.title === "string" ? x.title.trim() : "";
+    if (!fact_key || !title) continue;
+
+    if (seen.has(fact_key)) continue;
+    seen.add(fact_key);
+
+    const summary = typeof x.summary === "string" ? x.summary.trim() : "";
+    const related_tickers = Array.isArray(x.related_tickers)
+      ? Array.from(new Set(x.related_tickers.filter((t) => typeof t === "string" && t.trim()).map((t) => t.trim())))
+      : [];
+
+    valid.push({
+      domain: domain as FactDomain,
+      fact_key,
+      title,
+      summary,
+      related_tickers,
+      sentiment: clampPositive((x as { sentiment?: unknown }).sentiment ?? 0, -1, 1, 0),
+      reliability: clampPositive((x as { reliability?: unknown }).reliability ?? 0.5, 0, 1, 0.5),
+    });
+  }
+
+  return valid;
+}
+
 const REFINER_SYSTEM = `너는 한국 주식 투자용 지식베이스 정제 에이전트다.
 입력된 원본 문서에서 투자 의사결정에 유의미한 facts만 추출해서 JSON으로 반환한다.
 
@@ -223,7 +491,8 @@ const REFINER_SYSTEM = `너는 한국 주식 투자용 지식베이스 정제 �
 - reliability: 원문 신뢰도와 fact의 확실성을 곱한 값 0..1
 - 의미 없는 잡담/광고는 제외하고 빈 배열 반환
 
-응답 스키마: {"facts": ExtractedFact[]}`;
+응답 스키마: {"facts": ExtractedFact[]}
+- 공통 출력 스키마 버전: kb-facts-v1`;
 
 export async function refineOne(docId: string): Promise<{ ok: boolean; facts: number; error?: string }> {
   const { data: doc, error } = await supabaseAdmin
@@ -241,8 +510,13 @@ export async function refineOne(docId: string): Promise<{ ok: boolean; facts: nu
     reliability: number | null;
   };
 
+  const sourceProfile = getCollectorProfile(d.source);
+  const sourceLabel = sourceProfile?.displayName ?? d.source;
+  const promptVersion = sourceProfile?.parserVersion ?? "kb-facts-v1";
+
   const userPrompt = `소스: ${d.source}
 원본 신뢰도: ${d.reliability ?? "?"}
+추출 전략: 공통 스키마 버전=${promptVersion}, 출처 라벨=${sourceLabel}
 제목: ${d.title ?? ""}
 본문:
 ${(d.body ?? "").slice(0, 6000)}
@@ -256,16 +530,14 @@ ${(d.body ?? "").slice(0, 6000)}
     return { ok: false, facts: 0, error: (err as Error).message };
   }
 
-  let parsed: { facts?: ExtractedFact[] };
+  let parsedFacts: ExtractedFact[];
   try {
-    parsed = JSON.parse(raw);
+    parsedFacts = safeParseFactList(raw);
   } catch {
-    return { ok: false, facts: 0, error: "AI 응답 JSON 파싱 실패" };
+    return { ok: false, facts: 0, error: "AI 응답 JSON 스키마/파싱 실패" };
   }
 
-  const facts = (parsed.facts ?? []).filter((f) => f.fact_key && f.title && f.domain);
-
-  for (const f of facts) {
+  for (const f of parsedFacts) {
     // upsert by fact_key
     const { data: existing } = await supabaseAdmin
       .from("kb_facts")
@@ -276,30 +548,40 @@ ${(d.body ?? "").slice(0, 6000)}
     if (existing) {
       const ex = existing as unknown as { id: string; source_doc_ids: string[] | null };
       const merged = Array.from(new Set([...(ex.source_doc_ids ?? []), d.id]));
-      await (supabaseAdmin.from("kb_facts") as any)
-        .update({
+      try {
+        await (supabaseAdmin.from("kb_facts") as any)
+          .update({
+            title: f.title,
+            summary: f.summary,
+            related_tickers: f.related_tickers,
+            sentiment: f.sentiment,
+            reliability: f.reliability,
+            source_doc_ids: merged,
+            updated_at: new Date().toISOString(),
+            pipeline_version: promptVersion,
+            is_active: true,
+          })
+          .eq("id", ex.id);
+      } catch (err) {
+        console.error("[collector:refine] update existing fact error", err);
+      }
+    } else {
+      try {
+        await supabaseAdmin.from("kb_facts").insert({
+          domain: f.domain,
+          fact_key: f.fact_key,
           title: f.title,
           summary: f.summary,
-          related_tickers: f.related_tickers ?? [],
+          related_tickers: f.related_tickers,
           sentiment: f.sentiment,
           reliability: f.reliability,
-          source_doc_ids: merged,
-          updated_at: new Date().toISOString(),
+          source_doc_ids: [d.id],
+          pipeline_version: promptVersion,
           is_active: true,
-        })
-        .eq("id", ex.id);
-    } else {
-      await supabaseAdmin.from("kb_facts").insert({
-        domain: f.domain,
-        fact_key: f.fact_key,
-        title: f.title,
-        summary: f.summary,
-        related_tickers: f.related_tickers ?? [],
-        sentiment: f.sentiment,
-        reliability: f.reliability,
-        source_doc_ids: [d.id],
-        is_active: true,
-      });
+        });
+      } catch (err) {
+        console.error("[collector:refine] insert fact error", err);
+      }
     }
   }
 
@@ -307,7 +589,7 @@ ${(d.body ?? "").slice(0, 6000)}
     .update({ processed_at: new Date().toISOString() })
     .eq("id", d.id);
 
-  return { ok: true, facts: facts.length };
+  return { ok: true, facts: parsedFacts.length };
 }
 
 export async function runRefiner(limit = 10): Promise<{

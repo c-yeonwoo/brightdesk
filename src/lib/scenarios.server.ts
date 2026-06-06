@@ -9,6 +9,19 @@ export interface ScenarioParams {
   maPeriod: 20 | 60;
 }
 
+type ScenarioRunStatus = "running" | "success" | "failed";
+
+export type ScenarioRunRecord = {
+  run_id: string;
+  status: ScenarioRunStatus;
+  total_scenarios: number;
+  completed_scenarios: number;
+  current_scenario: string | null;
+  error_message: string | null;
+  started_at: string;
+  finished_at: string | null;
+};
+
 const DEFAULT_TICKERS = ["AAPL", "NVDA", "MSFT", "TSLA", "GOOGL"];
 
 interface DailyRow {
@@ -53,6 +66,68 @@ interface SimResult {
   mdd: number;
   finalValue: number;
   trades: number;
+}
+
+async function createScenarioRun(totalScenarios: number) {
+  const runId = crypto.randomUUID();
+  const { error } = await (supabaseAdmin as any).from("scenario_runs").insert({
+    run_id: runId,
+    status: "running",
+    total_scenarios: totalScenarios,
+    completed_scenarios: 0,
+    current_scenario: null,
+    error_message: null,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return runId;
+}
+
+async function updateScenarioRun(runId: string, patch: Partial<ScenarioRunRecord>) {
+  const updates: Record<string, unknown> = {
+    ...patch,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await (supabaseAdmin as any)
+    .from("scenario_runs")
+    .update(updates)
+    .eq("run_id", runId);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function getLatestScenarioRun(): Promise<ScenarioRunRecord | null> {
+  const { data, error } = await (supabaseAdmin as any)
+    .from("scenario_runs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as ScenarioRunRecord | null;
+}
+
+export async function getScenarioRunById(runId: string): Promise<ScenarioRunRecord | null> {
+  const { data, error } = await (supabaseAdmin as any)
+    .from("scenario_runs")
+    .select("*")
+    .eq("run_id", runId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as ScenarioRunRecord | null;
 }
 
 function simulate(history: Record<string, DailyRow[]>, params: ScenarioParams, initial = 10_000_000): SimResult {
@@ -178,7 +253,11 @@ export function generateScenarioGrid(): { name: string; params: ScenarioParams }
   return grid.slice(0, 10);
 }
 
-export async function runAllScenarios(tickers: string[] = DEFAULT_TICKERS, days = 180) {
+export async function runAllScenarios(
+  tickers: string[] = DEFAULT_TICKERS,
+  days = 180,
+  runId?: string,
+) {
   // load history once
   const history: Record<string, DailyRow[]> = {};
   for (const t of tickers) {
@@ -206,9 +285,40 @@ export async function runAllScenarios(tickers: string[] = DEFAULT_TICKERS, days 
       .select()
       .single();
     results.push(data);
+
+    if (runId) {
+      await updateScenarioRun(runId, {
+        completed_scenarios: results.length,
+        current_scenario: g.name,
+      });
+    }
   }
+
+  if (runId) {
+    await updateScenarioRun(runId, {
+      completed_scenarios: results.length,
+      status: "success",
+      finished_at: new Date().toISOString(),
+      current_scenario: null,
+    });
+  }
+
   results.sort((a: any, b: any) => Number(b.score) - Number(a.score));
   return { count: results.length, scenarios: results, best: results[0] };
+}
+
+export async function runAllScenariosAsync(tickers: string[] = DEFAULT_TICKERS, days = 180) {
+  const runId = await createScenarioRun(generateScenarioGrid().length);
+
+  void runAllScenarios(tickers, days, runId).catch(async (error) => {
+    await updateScenarioRun(runId, {
+      status: "failed",
+      error_message: String(error instanceof Error ? error.message : error),
+      finished_at: new Date().toISOString(),
+    });
+  });
+
+  return { runId, status: "running" as const };
 }
 
 export async function getBestScenario() {

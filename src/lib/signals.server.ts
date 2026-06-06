@@ -46,6 +46,59 @@ interface FactRow {
 
 export const DEFAULT_WEIGHTS = { technical: 0.35, fundamental: 0.30, kb: 0.35 };
 
+type SignalWeights = {
+  technical: number;
+  fundamental: number;
+  kb: number;
+};
+
+function clampWeight(v: unknown, fallback: number) {
+  if (typeof v !== "number" || Number.isNaN(v) || !Number.isFinite(v)) return fallback;
+  return Math.max(0, Math.min(5, v));
+}
+
+function parseSignalWeightsFromEnv(): SignalWeights {
+  const json = process.env.BRIGHTDESK_SIGNAL_WEIGHTS_JSON;
+  if (json) {
+    try {
+      const parsed = JSON.parse(json) as Partial<SignalWeights>;
+      if (parsed && typeof parsed === "object") {
+        const technical = clampWeight(parsed.technical, DEFAULT_WEIGHTS.technical);
+        const fundamental = clampWeight(parsed.fundamental, DEFAULT_WEIGHTS.fundamental);
+        const kb = clampWeight(parsed.kb, DEFAULT_WEIGHTS.kb);
+        const sum = technical + fundamental + kb;
+        if (sum > 0) {
+          return {
+            technical: technical / sum,
+            fundamental: fundamental / sum,
+            kb: kb / sum,
+          };
+        }
+      }
+    } catch {
+      // fallback below
+    }
+  }
+
+  const technical = clampWeight(parseFloat(process.env.BRIGHTDESK_WEIGHT_TECHNICAL ?? ""), DEFAULT_WEIGHTS.technical);
+  const fundamental = clampWeight(
+    parseFloat(process.env.BRIGHTDESK_WEIGHT_FUNDAMENTAL ?? ""),
+    DEFAULT_WEIGHTS.fundamental,
+  );
+  const kb = clampWeight(parseFloat(process.env.BRIGHTDESK_WEIGHT_KB ?? ""), DEFAULT_WEIGHTS.kb);
+
+  const sum = technical + fundamental + kb;
+  if (sum > 0) {
+    return {
+      technical: technical / sum,
+      fundamental: fundamental / sum,
+      kb: kb / sum,
+    };
+  }
+
+  return DEFAULT_WEIGHTS;
+}
+
 // 기술적 분석 점수 (-3 ~ +3)
 export function computeTechnicalScore(args: {
   latestPrice: PriceRow;
@@ -153,7 +206,7 @@ async function loadInputs(ticker: string) {
 
 export async function computeSignalForTicker(
   ticker: string,
-  weights = DEFAULT_WEIGHTS,
+  weights: SignalWeights = parseSignalWeightsFromEnv(),
 ): Promise<SignalRow | null> {
   const t = ticker.toUpperCase();
   const inputs = await loadInputs(t);

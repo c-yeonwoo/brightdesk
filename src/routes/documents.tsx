@@ -22,10 +22,8 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 
-import { getDocumentBody, listDocuments } from "@/lib/kb.functions";
-import { SOURCE_LABEL, fmtDateTime } from "@/lib/kb-format";
-
-const SOURCES = ["broker_pdf", "mijueun_youtube", "snoomi_kakao", "news"] as const;
+import { getDocumentBody, listDocuments, listSources } from "@/lib/kb.functions";
+import { formatSourceLabel, fmtDateTime } from "@/lib/kb-format";
 
 export const Route = createFileRoute("/documents")({
   head: () => ({
@@ -51,6 +49,11 @@ function DocsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const { data: catalog = [] as { source: string; count: number }[] } = useQuery({
+    queryKey: ["kb-sources"],
+    queryFn: () => listSources(),
+  });
 
   const filters = useMemo(
     () => ({
@@ -87,8 +90,10 @@ function DocsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">전체 소스</SelectItem>
-            {SOURCES.map((s) => (
-              <SelectItem key={s} value={s}>{SOURCE_LABEL[s]}</SelectItem>
+            {(catalog ?? []).map((entry) => (
+              <SelectItem key={entry.source} value={entry.source}>
+                {formatSourceLabel(entry.source)}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -179,7 +184,7 @@ function DocsPage() {
                   </td>
                   <td className="px-3 py-2.5">
                     <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
-                      {SOURCE_LABEL[d.source as keyof typeof SOURCE_LABEL] ?? d.source}
+                      {formatSourceLabel(d.source as string)}
                     </span>
                   </td>
                   <td className="px-3 py-2.5"><ReliabilityBar value={d.reliability} /></td>
@@ -229,7 +234,7 @@ function DocSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
             <SheetHeader className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
-                  {SOURCE_LABEL[d.source as keyof typeof SOURCE_LABEL] ?? d.source}
+                  {formatSourceLabel(d.source as string)}
                 </span>
                 {d.external_id && (
                   <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">

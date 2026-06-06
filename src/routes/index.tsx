@@ -82,10 +82,53 @@ function DashboardPage() {
 
 function DashboardContent({ data }: { data: any }) {
   const s = data.summary;
+  const weekly = data.weekly_summary ?? {};
   const pnlPositive = s.pnl >= 0;
+  const weeklyReturnPct = weekly.return_pct != null ? Number(weekly.return_pct) : null;
+  const weeklyReturnAmt = weekly.return_amount != null ? Number(weekly.return_amount) : null;
+  const weeklySignalCount = Number(weekly.signal_count ?? 0);
+  const weeklyQualityHitRate = weekly.outcomes?.hit_rate != null ? Number(weekly.outcomes.hit_rate) : null;
+  const weeklySignalConfidence = weekly.avg_confidence != null ? Number(weekly.avg_confidence) : null;
 
   return (
     <>
+      <section className="mb-4 rounded-xl border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">최근 7일 요약</h2>
+          <span className="text-[11px] text-muted-foreground">
+            {weekly.period_start ? new Date(weekly.period_start).toLocaleDateString() : "최근 7일"}
+          </span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">성과(7일)</div>
+            <div className="mt-1 text-base font-semibold tabular-nums" style={{ color: (weeklyReturnPct ?? 0) >= 0 ? "var(--success)" : "var(--danger)" }}>
+              {weeklyReturnPct == null ? "—" : `${weeklyReturnPct >= 0 ? "+" : ""}${weeklyReturnPct.toFixed(2)}%`}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              {weeklyReturnAmt == null ? "수익 금액 대기중" : `₩${fmtKrw(Math.round(weeklyReturnAmt))}`}
+            </div>
+          </div>
+          <div className="rounded-lg border p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">추천 품질</div>
+            <div className="mt-1 text-base font-semibold tabular-nums">
+              {weeklyQualityHitRate == null ? "—" : `${Math.round(weeklyQualityHitRate * 100)}%`}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              {weeklySignalCount}건 중 평균 신뢰도{" "}
+              {weeklySignalConfidence == null ? "—" : `${Math.round(weeklySignalConfidence * 100)}%`}
+            </div>
+          </div>
+          <div className="rounded-lg border p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">운영 안정성(7일)</div>
+            <div className="mt-1 text-base font-semibold tabular-nums">{data.txns_7d_count}건</div>
+            <div className="text-[11px] text-muted-foreground">
+              포트폴리오 거래 7일치 반영
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* KPIs */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard

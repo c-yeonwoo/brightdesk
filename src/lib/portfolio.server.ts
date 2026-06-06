@@ -10,6 +10,28 @@ export async function getOrCreateDefaultPortfolio() {
   return getOrCreateSystemPortfolio();
 }
 
+export async function getOrCreateUserPortfolioForUser(userId: string) {
+  const sb = supabaseAdmin;
+  const { data: existing } = await sb
+    .from("portfolios")
+    .select("*")
+    .eq("kind", "user")
+    .eq("owner_id", userId)
+    .maybeSingle();
+  if (existing) return existing;
+
+  const fallbackName = `user-${userId}`;
+  const { data: legacy } = await sb.from("portfolios").select("*").eq("name", fallbackName).maybeSingle();
+  if (legacy) return legacy;
+
+  const { data: created, error } = await (sb.from("portfolios") as any)
+    .insert({ name: fallbackName, kind: "user", owner_id: userId, initial_cash: 0, cash: 0 })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return created;
+}
+
 export async function getOrCreateSystemPortfolio() {
   const sb = supabaseAdmin;
   const { data } = await sb.from("portfolios").select("*").eq("name", "default").maybeSingle();

@@ -39,7 +39,7 @@ import { Button } from "@/components/ui/button";
 import { getFactDetail, listFacts, toggleFactActive } from "@/lib/kb.functions";
 import {
   DOMAIN_LABEL,
-  SOURCE_LABEL,
+  formatSourceLabel,
   fmtDateTime,
   relativeTime,
 } from "@/lib/kb-format";
@@ -373,7 +373,7 @@ function FactDetailSheet({
                               {s.title ?? "(제목 없음)"}
                             </div>
                             <div className="mt-0.5 text-[11px] text-muted-foreground">
-                              {SOURCE_LABEL[s.source as keyof typeof SOURCE_LABEL] ?? s.source} ·{" "}
+                              {formatSourceLabel(s.source)} ·{" "}
                               {fmtDateTime(s.published_at)}
                             </div>
                           </div>

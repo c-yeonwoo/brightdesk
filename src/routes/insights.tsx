@@ -6,7 +6,13 @@ import { SignalCard } from "@/components/kb/SignalCard";
 import { TermTooltip } from "@/components/kb/TermTooltip";
 import { getLatestSignalPerTicker, listSignals } from "@/lib/signals.functions";
 import { listFacts } from "@/lib/kb.functions";
-import { getBestScenarioCurve, getScenarios, runScenarios } from "@/lib/scenarios.functions";
+import {
+  getBestScenarioCurve,
+  getLatestScenarioRunInfo,
+  getScenarioRunInfo,
+  getScenarios,
+  runScenarios,
+} from "@/lib/scenarios.functions";
 import { mddInKrw, usePlainMode } from "@/lib/plain-mode";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -20,7 +26,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/insights")({
   head: () => ({
@@ -150,6 +156,8 @@ function BacktestTab() {
   const qc = useQueryClient();
   const { plain } = usePlainMode();
   const [invest, setInvest] = useState(1_000_000);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [lastHandledRunId, setLastHandledRunId] = useState<string | null>(null);
   const { data: scenarios, isLoading } = useQuery({
     queryKey: ["scenarios"],
     queryFn: () => getScenarios(),
@@ -158,13 +166,47 @@ function BacktestTab() {
     queryKey: ["best-scenario-curve"],
     queryFn: () => getBestScenarioCurve(),
   });
+  const { data: scenarioRun } = useQuery({
+    queryKey: ["scenario-run", runId],
+    queryFn: () => (runId ? getScenarioRunInfo({ data: { runId } }) : getLatestScenarioRunInfo()),
+    enabled: Boolean(runId),
+    refetchInterval: (query) => {
+      const latest = query.state.data as any;
+      return latest?.status === "running" ? 2_000 : false;
+    },
+  });
   const run = useMutation({
     mutationFn: () => runScenarios(),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setRunId(result.runId);
+      setLastHandledRunId(null);
       qc.invalidateQueries({ queryKey: ["scenarios"] });
       qc.invalidateQueries({ queryKey: ["best-scenario-curve"] });
     },
   });
+
+  useEffect(() => {
+    if (!scenarioRun?.run_id || !lastHandledRunId) return;
+    if (scenarioRun.status !== "running" && scenarioRun.run_id === lastHandledRunId) {
+      qc.invalidateQueries({ queryKey: ["scenarios"] });
+      qc.invalidateQueries({ queryKey: ["best-scenario-curve"] });
+      setLastHandledRunId(null);
+    }
+  }, [scenarioRun?.status, scenarioRun?.run_id, qc, lastHandledRunId]);
+
+  useEffect(() => {
+    if (!runId) return;
+    setLastHandledRunId(runId);
+  }, [runId]);
+
+  const canRun = !run.isPending && scenarioRun?.status !== "running";
+  const runStatusText = scenarioRun
+    ? scenarioRun.status === "running"
+      ? `백테스트 실행 중 · ${scenarioRun.completed_scenarios}/${scenarioRun.total_scenarios}`
+      : scenarioRun.status === "success"
+        ? `마지막 실행 완료`
+        : "마지막 실행 실패"
+    : "아직 실행 이력이 없습니다.";
 
   const rows = (scenarios ?? []) as any[];
   const best = curveData?.best as any;
@@ -192,7 +234,7 @@ function BacktestTab() {
         </p>
         <button
           onClick={() => run.mutate()}
-          disabled={run.isPending}
+          disabled={!canRun}
           className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
         >
           {run.isPending ? (
@@ -203,6 +245,8 @@ function BacktestTab() {
           시뮬레이션 재실행
         </button>
       </div>
+
+      <div className="rounded-xl border bg-card/80 p-2 text-[11px] text-muted-foreground">{runStatusText}</div>
 
       {best && (
         <div className="rounded-xl border bg-card p-4">

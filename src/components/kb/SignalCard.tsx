@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, Calculator, Minus, Target } from "lucide-react";
+import type { ReactNode } from "react";
 import { lightFor, lightHex, plainConclusion, plainConfidence, plainRsi, usePlainMode } from "@/lib/plain-mode";
 import { TermTooltip } from "./TermTooltip";
 
@@ -20,6 +21,7 @@ interface Props {
   rsi14?: number | null;
   macdHist?: number | null;
   factIds?: string[];
+  actions?: ReactNode;
 }
 
 const KIND_STYLE: Record<string, { color: string; bg: string; label: string; icon: any }> = {
@@ -216,6 +218,12 @@ export function SignalCard(p: Props) {
           </li>
         ))}
       </ul>
+
+      {p.actions && (
+        <div className="mt-3 border-t pt-2">
+          <div className="flex flex-wrap items-center gap-2">{p.actions}</div>
+        </div>
+      )}
 
       {(p.rsi14 != null || p.macdHist != null || (p.factIds && p.factIds.length > 0)) && (
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2 text-[10px] text-muted-foreground">

@@ -7,12 +7,16 @@ export const DOMAIN_LABEL: Record<KbDomain, string> = {
   politics: "정치",
 };
 
-export const SOURCE_LABEL: Record<SourceType, string> = {
+export const SOURCE_LABEL: Record<string, string> = {
   broker_pdf: "증권사 리포트",
   mijueun_youtube: "미주은 유튜브",
   snoomi_kakao: "스누미 카톡",
   news: "뉴스",
 };
+
+export function formatSourceLabel(source: SourceType): string {
+  return SOURCE_LABEL[source] ?? source;
+}
 
 export const DOMAIN_COLOR_VAR: Record<KbDomain, string> = {
   macro: "var(--domain-macro)",

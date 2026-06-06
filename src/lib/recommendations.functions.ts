@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireAuthenticatedUser } from "./auth.server";
 
 const HoldingSchema = z.object({
   ticker: z.string().min(1).max(20).regex(/^[A-Za-z0-9.\-^]+$/),
@@ -8,7 +9,6 @@ const HoldingSchema = z.object({
 });
 
 const RecRequest = z.object({
-  portfolio_id: z.string().uuid().optional(),
   holdings: z.array(HoldingSchema).min(0).max(50),
   candidate_tickers: z.array(z.string().min(1).max(20)).max(50).optional(),
   save: z.boolean().optional(),
@@ -17,8 +17,10 @@ const RecRequest = z.object({
 export const generateRebalanceRecommendation = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => RecRequest.parse(d))
   .handler(async ({ data }) => {
+    const userId = await requireAuthenticatedUser();
     const { generateRecommendation, saveRecommendation } = await import("./recommendations.server");
-    const { getOrCreateUserPortfolio } = await import("./portfolio.server");
+    const { getOrCreateUserPortfolioForUser } = await import("./portfolio.server");
+    const pf = await getOrCreateUserPortfolioForUser(userId);
 
     const rec = await generateRecommendation({
       holdings: data.holdings,
@@ -27,9 +29,7 @@ export const generateRebalanceRecommendation = createServerFn({ method: "POST" }
 
     let saved: any = null;
     if (data.save) {
-      const pf = data.portfolio_id
-        ? { id: data.portfolio_id }
-        : await getOrCreateUserPortfolio();
+      // 저장은 인증된 사용자 포트폴리오에 한정
       saved = await saveRecommendation(pf.id, rec);
     }
     return { ...rec, saved };
@@ -38,9 +38,13 @@ export const generateRebalanceRecommendation = createServerFn({ method: "POST" }
 export const listRecommendations = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ limit: z.number().int().min(1).max(50).optional() }).parse(d ?? {}))
   .handler(async ({ data }) => {
+    const userId = await requireAuthenticatedUser();
+    const { getOrCreateUserPortfolioForUser } = await import("./portfolio.server");
+    const pf = await getOrCreateUserPortfolioForUser(userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rows, error } = await supabaseAdmin
       .from("rebalance_recommendations")
+      .eq("portfolio_id", pf.id)
       .select("*")
       .order("generated_at", { ascending: false })
       .limit(data.limit ?? 20);
@@ -55,9 +59,10 @@ export const saveUserHoldings = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data }) => {
+    const userId = await requireAuthenticatedUser();
+    const { getOrCreateUserPortfolioForUser } = await import("./portfolio.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { getOrCreateUserPortfolio } = await import("./portfolio.server");
-    const pf = await getOrCreateUserPortfolio();
+    const pf = await getOrCreateUserPortfolioForUser(userId);
     // 전체 교체
     await supabaseAdmin.from("user_portfolio_inputs").delete().eq("portfolio_id", pf.id);
     if (data.holdings.length > 0) {
@@ -74,9 +79,10 @@ export const saveUserHoldings = createServerFn({ method: "POST" })
   });
 
 export const getUserHoldings = createServerFn({ method: "GET" }).handler(async () => {
+  const userId = await requireAuthenticatedUser();
+  const { getOrCreateUserPortfolioForUser } = await import("./portfolio.server");
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { getOrCreateUserPortfolio } = await import("./portfolio.server");
-  const pf = await getOrCreateUserPortfolio();
+  const pf = await getOrCreateUserPortfolioForUser(userId);
   const { data, error } = await supabaseAdmin
     .from("user_portfolio_inputs")
     .select("*")

@@ -16,6 +16,7 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
 
   const pf = await getOrCreateSystemPortfolio();
   const overview = await getPortfolioOverview(pf.id);
+  const weekSince = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
 
   // 자산 곡선
   const { data: snapshots } = await supabaseAdmin
@@ -27,7 +28,7 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
 
   // 24h 시그널 + 거래 (거래는 근거 시그널과 조인)
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const [{ data: recentSigs }, { data: recentTxnsRaw }] = await Promise.all([
+  const [{ data: recentSigs }, { data: recentTxnsRaw }, { data: weeklySignals }, { data: weeklyOutcomes }] = await Promise.all([
     supabaseAdmin
       .from("signals")
       .select("id,ticker,ts,kind,score,confidence,technical_score,fundamental_score,kb_score,reasons,weights,rsi14,macd_hist")
@@ -40,6 +41,18 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
       .eq("portfolio_id", pf.id)
       .order("executed_at", { ascending: false })
       .limit(50),
+    supabaseAdmin
+      .from("signals")
+      .select("id,ticker,ts,kind,score,confidence")
+      .gte("ts", weekSince)
+      .order("ts", { ascending: false })
+      .limit(500),
+    supabaseAdmin
+      .from("signal_outcomes")
+      .select("signal_id,hit,ret_5d,ret_20d")
+      .gte("entry_date", weekSince)
+      .order("entry_date", { ascending: false })
+      .limit(500),
   ]);
 
   // 각 거래의 근거 시그널 합치기
@@ -114,6 +127,42 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
   const day7 = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
   const txns7 = tradeLedger.filter((t) => t.executed_at >= day7);
 
+  const recentWeekSignals = (weeklySignals ?? []) as any[];
+  const weekOutcomeRows = (weeklyOutcomes ?? []) as any[];
+  const weekSignalByKind = { BUY: 0, SELL: 0, HOLD: 0 };
+  let weekConfSum = 0;
+  let weekConfCount = 0;
+  for (const s of recentWeekSignals) {
+    if (s.kind in weekSignalByKind) weekSignalByKind[s.kind as keyof typeof weekSignalByKind]++;
+    if (s.confidence != null) {
+      const confidence = Number(s.confidence);
+      if (!Number.isNaN(confidence)) {
+        weekConfSum += confidence;
+        weekConfCount++;
+      }
+    }
+  }
+
+  const weekOutcomeCount = weekOutcomeRows.length;
+  const weekHitCount = weekOutcomeRows.filter((r: any) => r.hit === true).length;
+  const weekRet5Rows = weekOutcomeRows.map((r: any) => Number(r.ret_5d)).filter((v) => Number.isFinite(v));
+  const weekRet20Rows = weekOutcomeRows.map((r: any) => Number(r.ret_20d)).filter((v) => Number.isFinite(v));
+  const weekRet5 = weekRet5Rows.length ? weekRet5Rows.reduce((acc, n) => acc + n, 0) / weekRet5Rows.length : null;
+  const weekRet20 = weekRet20Rows.length ? weekRet20Rows.reduce((acc, n) => acc + n, 0) / weekRet20Rows.length : null;
+
+  const snapRows = (snapshots ?? []) as any[];
+  const weekTarget = Date.parse(weekSince);
+  let weekBaseValue: number | null = null;
+  for (const row of snapRows) {
+    if (Date.parse(row.date) <= weekTarget) weekBaseValue = Number(row.total_value);
+  }
+  if (weekBaseValue === null && snapRows.length > 0) weekBaseValue = Number(snapRows[0].total_value);
+
+  const latestSnap = snapRows.length > 0 ? snapRows[snapRows.length - 1] : null;
+  const latestTotal = latestSnap ? Number(latestSnap.total_value) : null;
+  const weekReturnAmount = latestTotal != null && weekBaseValue != null ? latestTotal - weekBaseValue : null;
+  const weekReturnPct = weekReturnAmount != null && weekBaseValue ? (weekReturnAmount / weekBaseValue) * 100 : null;
+
   return {
     portfolio: overview.portfolio,
     summary: overview.summary,
@@ -126,5 +175,21 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
     winrate: { buy: buyWR, sell: sellWR },
     regime,
     exit_alerts: exitChecks.filter((e) => e.triggered),
+    weekly_summary: {
+      period_start: weekSince,
+      signal_count: recentWeekSignals.length,
+      signal_by_kind: weekSignalByKind,
+      avg_confidence: weekConfCount > 0 ? weekConfSum / weekConfCount : null,
+      outcomes: {
+        count: weekOutcomeCount,
+        hit_rate: weekOutcomeCount > 0 ? weekHitCount / weekOutcomeCount : null,
+        avg_ret_5d: weekRet5,
+        avg_ret_20d: weekRet20,
+      },
+      return_amount: weekReturnAmount,
+      return_pct: weekReturnPct,
+      latest_total: latestTotal,
+      base_total: weekBaseValue,
+    },
   };
 });
