@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Activity, Briefcase, Database, Sparkles } from "lucide-react";
+import brightdeskLogo from "@/assets/brightdesk-logo.png";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCenter } from "./AlertCenter";
