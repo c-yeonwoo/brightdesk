@@ -11,7 +11,7 @@ import {
 } from "@/lib/portfolio.functions";
 import { fmtDateTime } from "@/lib/kb-format";
 
-export const Route = createFileRoute("/portfolio")({
+export const Route = createFileRoute("/_authenticated/portfolio")({
   head: () => ({
     meta: [
       { title: "포트폴리오 · Sentinel" },
