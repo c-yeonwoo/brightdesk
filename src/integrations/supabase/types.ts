@@ -577,7 +577,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      _invoke_cron: { Args: { endpoint: string }; Returns: number }
     }
     Enums: {
       kb_domain: "macro" | "theme" | "news" | "politics"
