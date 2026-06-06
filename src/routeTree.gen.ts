@@ -12,15 +12,17 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TickersRouteImport } from './routes/tickers'
 import { Route as SignalsRouteImport } from './routes/signals'
 import { Route as ScenariosRouteImport } from './routes/scenarios'
-import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PipelineRouteImport } from './routes/pipeline'
-import { Route as MyPortfolioRouteImport } from './routes/my-portfolio'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as FactsRouteImport } from './routes/facts'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as DataRouteImport } from './routes/data'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ActionsRouteImport } from './routes/actions'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedPortfolioRouteImport } from './routes/_authenticated/portfolio'
+import { Route as AuthenticatedMyPortfolioRouteImport } from './routes/_authenticated/my-portfolio'
 import { Route as ApiPublicCronHourlyRebalanceRouteImport } from './routes/api/public/cron/hourly-rebalance'
 import { Route as ApiPublicCronCollectRouteImport } from './routes/api/public/cron/collect'
 
@@ -39,19 +41,9 @@ const ScenariosRoute = ScenariosRouteImport.update({
   path: '/scenarios',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PortfolioRoute = PortfolioRouteImport.update({
-  id: '/portfolio',
-  path: '/portfolio',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PipelineRoute = PipelineRouteImport.update({
   id: '/pipeline',
   path: '/pipeline',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MyPortfolioRoute = MyPortfolioRouteImport.update({
-  id: '/my-portfolio',
-  path: '/my-portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InsightsRoute = InsightsRouteImport.update({
@@ -74,9 +66,18 @@ const DataRoute = DataRouteImport.update({
   path: '/data',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ActionsRoute = ActionsRouteImport.update({
   id: '/actions',
   path: '/actions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -84,6 +85,17 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedPortfolioRoute = AuthenticatedPortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMyPortfolioRoute =
+  AuthenticatedMyPortfolioRouteImport.update({
+    id: '/my-portfolio',
+    path: '/my-portfolio',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicCronHourlyRebalanceRoute =
   ApiPublicCronHourlyRebalanceRouteImport.update({
     id: '/api/public/cron/hourly-rebalance',
@@ -99,49 +111,53 @@ const ApiPublicCronCollectRoute = ApiPublicCronCollectRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/actions': typeof ActionsRoute
+  '/auth': typeof AuthRoute
   '/data': typeof DataRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
   '/insights': typeof InsightsRoute
-  '/my-portfolio': typeof MyPortfolioRoute
   '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
   '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
+  '/my-portfolio': typeof AuthenticatedMyPortfolioRoute
+  '/portfolio': typeof AuthenticatedPortfolioRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
   '/api/public/cron/hourly-rebalance': typeof ApiPublicCronHourlyRebalanceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/actions': typeof ActionsRoute
+  '/auth': typeof AuthRoute
   '/data': typeof DataRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
   '/insights': typeof InsightsRoute
-  '/my-portfolio': typeof MyPortfolioRoute
   '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
   '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
+  '/my-portfolio': typeof AuthenticatedMyPortfolioRoute
+  '/portfolio': typeof AuthenticatedPortfolioRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
   '/api/public/cron/hourly-rebalance': typeof ApiPublicCronHourlyRebalanceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/actions': typeof ActionsRoute
+  '/auth': typeof AuthRoute
   '/data': typeof DataRoute
   '/documents': typeof DocumentsRoute
   '/facts': typeof FactsRoute
   '/insights': typeof InsightsRoute
-  '/my-portfolio': typeof MyPortfolioRoute
   '/pipeline': typeof PipelineRoute
-  '/portfolio': typeof PortfolioRoute
   '/scenarios': typeof ScenariosRoute
   '/signals': typeof SignalsRoute
   '/tickers': typeof TickersRoute
+  '/_authenticated/my-portfolio': typeof AuthenticatedMyPortfolioRoute
+  '/_authenticated/portfolio': typeof AuthenticatedPortfolioRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
   '/api/public/cron/hourly-rebalance': typeof ApiPublicCronHourlyRebalanceRoute
 }
@@ -150,62 +166,66 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/actions'
+    | '/auth'
     | '/data'
     | '/documents'
     | '/facts'
     | '/insights'
-    | '/my-portfolio'
     | '/pipeline'
-    | '/portfolio'
     | '/scenarios'
     | '/signals'
     | '/tickers'
+    | '/my-portfolio'
+    | '/portfolio'
     | '/api/public/cron/collect'
     | '/api/public/cron/hourly-rebalance'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/actions'
+    | '/auth'
     | '/data'
     | '/documents'
     | '/facts'
     | '/insights'
-    | '/my-portfolio'
     | '/pipeline'
-    | '/portfolio'
     | '/scenarios'
     | '/signals'
     | '/tickers'
+    | '/my-portfolio'
+    | '/portfolio'
     | '/api/public/cron/collect'
     | '/api/public/cron/hourly-rebalance'
   id:
     | '__root__'
     | '/'
+    | '/_authenticated'
     | '/actions'
+    | '/auth'
     | '/data'
     | '/documents'
     | '/facts'
     | '/insights'
-    | '/my-portfolio'
     | '/pipeline'
-    | '/portfolio'
     | '/scenarios'
     | '/signals'
     | '/tickers'
+    | '/_authenticated/my-portfolio'
+    | '/_authenticated/portfolio'
     | '/api/public/cron/collect'
     | '/api/public/cron/hourly-rebalance'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ActionsRoute: typeof ActionsRoute
+  AuthRoute: typeof AuthRoute
   DataRoute: typeof DataRoute
   DocumentsRoute: typeof DocumentsRoute
   FactsRoute: typeof FactsRoute
   InsightsRoute: typeof InsightsRoute
-  MyPortfolioRoute: typeof MyPortfolioRoute
   PipelineRoute: typeof PipelineRoute
-  PortfolioRoute: typeof PortfolioRoute
   ScenariosRoute: typeof ScenariosRoute
   SignalsRoute: typeof SignalsRoute
   TickersRoute: typeof TickersRoute
@@ -236,25 +256,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ScenariosRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/portfolio': {
-      id: '/portfolio'
-      path: '/portfolio'
-      fullPath: '/portfolio'
-      preLoaderRoute: typeof PortfolioRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/pipeline': {
       id: '/pipeline'
       path: '/pipeline'
       fullPath: '/pipeline'
       preLoaderRoute: typeof PipelineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/my-portfolio': {
-      id: '/my-portfolio'
-      path: '/my-portfolio'
-      fullPath: '/my-portfolio'
-      preLoaderRoute: typeof MyPortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/insights': {
@@ -285,11 +291,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DataRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/actions': {
       id: '/actions'
       path: '/actions'
       fullPath: '/actions'
       preLoaderRoute: typeof ActionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -298,6 +318,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/portfolio': {
+      id: '/_authenticated/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof AuthenticatedPortfolioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/my-portfolio': {
+      id: '/_authenticated/my-portfolio'
+      path: '/my-portfolio'
+      fullPath: '/my-portfolio'
+      preLoaderRoute: typeof AuthenticatedMyPortfolioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/api/public/cron/hourly-rebalance': {
       id: '/api/public/cron/hourly-rebalance'
@@ -316,16 +350,29 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedMyPortfolioRoute: typeof AuthenticatedMyPortfolioRoute
+  AuthenticatedPortfolioRoute: typeof AuthenticatedPortfolioRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedMyPortfolioRoute: AuthenticatedMyPortfolioRoute,
+  AuthenticatedPortfolioRoute: AuthenticatedPortfolioRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ActionsRoute: ActionsRoute,
+  AuthRoute: AuthRoute,
   DataRoute: DataRoute,
   DocumentsRoute: DocumentsRoute,
   FactsRoute: FactsRoute,
   InsightsRoute: InsightsRoute,
-  MyPortfolioRoute: MyPortfolioRoute,
   PipelineRoute: PipelineRoute,
-  PortfolioRoute: PortfolioRoute,
   ScenariosRoute: ScenariosRoute,
   SignalsRoute: SignalsRoute,
   TickersRoute: TickersRoute,
