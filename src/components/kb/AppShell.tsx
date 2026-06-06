@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCenter } from "./AlertCenter";
 import { PlainModeToggle } from "./PlainModeToggle";
+import { UserMenu } from "./UserMenu";
 import { getFxRate } from "@/lib/fx.functions";
 
 const nav = [
@@ -70,6 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
             <PlainModeToggle />
             <AlertCenter />
+            <UserMenu />
           </div>
         </div>
       </header>
