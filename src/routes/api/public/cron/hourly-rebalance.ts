@@ -1,10 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 // 1시간마다 자동 실행: 수집 → 시그널 생성 → 레짐 점검 → SL/TP 청산 → Track A 자동 운용 → 스냅샷.
+// Requires `x-cron-secret` header matching the CRON_SECRET project secret.
 export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }) => {
+        const unauthorized = verifyCronSecret(request);
+        if (unauthorized) return unauthorized;
         const start = Date.now();
         const log: Record<string, any> = {};
 
