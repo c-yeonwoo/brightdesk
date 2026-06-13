@@ -98,7 +98,7 @@
    - 소스별 parser, rate-limit, robots/법적 규약 준수, 실패 재시도 정책 구현.
 
 5. LLM 정제 품질 강화
-   - `LOVABLE_API_KEY` 호출 구조 안정화, schema 엄격 검증, fallback parser 및 휴리스틱 유효성 검증 추가.
+   - `AI_API_KEY` 호출 구조 안정화, schema 엄격 검증, fallback parser 및 휴리스틱 유효성 검증 추가.
    - 정제 실패 케이스 추적 및 수동 큐 대시보드 보강.
 
 ### P1: 트레이딩/의사결정 로직 정밀화

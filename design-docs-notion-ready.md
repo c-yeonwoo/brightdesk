@@ -1,7 +1,7 @@
 # BrightDesk Design Docs (Notion 반입용 정리본)
 
 작성일: 2026-06-05 (현재 브랜치 기준)
-대상: BrightDesk (Lovable scaffold 기반)
+대상: BrightDesk (독립 웹앱 전환 기준)
 작성자: Codex
 
 ## 1) 프로젝트 의도 / 범위
@@ -139,7 +139,7 @@
   - `BRIGHTDESK_CRON_WEBHOOK_URL(S)`, warning/critical webhook env 일체
   - `BRIGHTDESK_CRON_ALERT_COOLDOWN_MINUTES`, `BRIGHTDESK_CRON_ALERT_ALLOW_IN_DEV`
 - AI
-  - `LOVABLE_API_KEY`
+  - `AI_API_KEY`, `AI_MODEL`, `AI_GATEWAY_URL`
 
 ## 10) 로컬 실행 체크(체험 전)
 
@@ -163,4 +163,3 @@
 - Launch checklist
 - Risks / TODO
 - Runbook
-

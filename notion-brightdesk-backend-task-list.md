@@ -1,7 +1,7 @@
 # BrightDesk Backend 운영 태스크 (Notion용)
 
 - 문서 생성일: 2026-06-05
-- 범위: 현재 Lovable scaffold 기반 BrightDesk 프로젝트의 백엔드 안정화
+- 범위: 독립 웹앱 기준 BrightDesk 프로젝트의 백엔드 안정화
 - 전제: Supabase + TanStack Start + TypeScript 기반 구조 유지(현재 스택)
 
 ## 1) 프로젝트 의도 한 줄
@@ -127,7 +127,7 @@ autonomous 투자 의사결정 보조 플랫폼(Track A: 자동 신호/리밸런
   - 실행 스니펫:
   - `CRON_SECRET`(또는 `BRIGHTDESK_CRON_TOKEN`) / `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_JWT_SECRET`
   - `BRIGHTDESK_CRON_WEBHOOK_URL(S)` / `BRIGHTDESK_SLACK_WEBHOOK_URL` / `BRIGHTDESK_DISCORD_WEBHOOK_URL`
-  - `LOVABLE_API_KEY`
+  - `AI_API_KEY`, `AI_MODEL`, `AI_GATEWAY_URL`
 - [ ] 운영 전 수동 시나리오 1회 실행 및 로그 확인
   - `curl -X POST "$APP_URL/api/public/cron/collect" -H "x-cron-secret:$CRON_SECRET"`
   - `curl -X POST "$APP_URL/api/public/cron/hourly-rebalance" -H "x-cron-secret:$CRON_SECRET"`
@@ -172,7 +172,7 @@ autonomous 투자 의사결정 보조 플랫폼(Track A: 자동 신호/리밸런
 ### 로컬 미리보기 실행 체크(완료 후 사용자 우선 체험 전)
 - 사전:
   - `APP_URL` (예: `http://localhost:5173`)
-- 다음만 우선: `CRON_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`(혹은 `VITE_SUPABASE_PUBLISHABLE_KEY`), `LOVABLE_API_KEY`(요약 단계 검증시)
+- 다음만 우선: `CRON_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`(혹은 `VITE_SUPABASE_PUBLISHABLE_KEY`), `AI_API_KEY`(요약 단계 검증시)
 - 실행 순서:
   - `bun install`(또는 기존 패키지 매니저 기준 동일)
   - `bun run dev`

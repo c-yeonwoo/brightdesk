@@ -397,17 +397,20 @@ interface ExtractedFact {
   reliability: number; // 0..1
 }
 
-async function callLovableAI(systemPrompt: string, userPrompt: string): Promise<string> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) throw new Error("LOVABLE_API_KEY 미설정");
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+async function callAiGateway(systemPrompt: string, userPrompt: string): Promise<string> {
+  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY;
+  const model = process.env.AI_MODEL || "gpt-4.1-mini";
+  const baseUrl = process.env.AI_GATEWAY_URL || "https://api.openai.com/v1/chat/completions";
+  if (!apiKey) throw new Error("AI_API_KEY 또는 OPENAI_API_KEY 미설정");
+
+  const res = await fetch(baseUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -525,7 +528,7 @@ ${(d.body ?? "").slice(0, 6000)}
 
   let raw: string;
   try {
-    raw = await callLovableAI(REFINER_SYSTEM, userPrompt);
+    raw = await callAiGateway(REFINER_SYSTEM, userPrompt);
   } catch (err: unknown) {
     return { ok: false, facts: 0, error: (err as Error).message };
   }

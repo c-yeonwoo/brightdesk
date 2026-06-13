@@ -80,7 +80,6 @@ function toFailureCategories(reason: string): FailureCategory[] {
   }
 
   if (
-    has("lovable") ||
     has("llm") ||
     has("openai") ||
     has("ai") ||

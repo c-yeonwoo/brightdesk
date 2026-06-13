@@ -9,7 +9,6 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell } from "@/components/kb/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 import { PlainModeProvider } from "@/lib/plain-mode";
@@ -30,7 +29,7 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    console.error("[root-error]", error);
   }, [error]);
   return (
     <AppShell>
