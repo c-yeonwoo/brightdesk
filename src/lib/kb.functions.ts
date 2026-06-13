@@ -279,6 +279,17 @@ export const uploadDocumentForKb = createServerFn({ method: "POST" })
     };
   });
 
+export const refineDocumentForKb = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { refineOne } = await import("./collectors.server");
+    const result = await refineOne(data.id);
+    if (!result.ok) {
+      throw new Error(result.error ?? "KB 정제 실패");
+    }
+    return result;
+  });
+
 export const listFacts = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) =>
     z

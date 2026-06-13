@@ -112,6 +112,11 @@ autonomous 투자 의사결정 보조 플랫폼(Track A: 자동 신호/리밸런
 - [x] `/pipeline` 네임스페이스별 24h p95/평균 실행시간 노출
 - [x] p95 지연 경보(권고/크리티컬) 정책 반영
 - [x] cron 보안 주석 및 문서 설명 최신화(인증 적용 내용 반영)
+- [x] Lovable 의존성 제거 및 표준 TanStack/Vite 구성 전환
+- [x] Market Pulse 중심 MVP 홈 화면 전환
+- [x] text/PDF/image 수동 문서 입력과 KB 자동 정제
+- [x] 문서 상세에서 생성 KB facts 확인 및 정제 재실행
+- [x] ADR 작성: `docs/adr/0001-mvp-webapp-architecture.md`
 - [ ] `P0` 수동 실행 대응: `/pipeline` 수동 실행 결과를 운영 채널로 공유할 수 있게 문서화
 - [ ] `P1` 운영 SOP: 프로덕션 비밀키(SUPABASE/SERVICE_ROLE/JWT/CRON/HOOK) 반영 체크리스트 배포
 - [ ] `P1` 데이터 검수: 최근 24시간 `raw_documents`, `kb_facts`, `cron_runs` 샘플 20건 추출 후 품질 판정 완료
@@ -123,11 +128,11 @@ autonomous 투자 의사결정 보조 플랫폼(Track A: 자동 신호/리밸런
 - [ ] 수동 실행 2경로(`cron.collect`, `cron.hourly-rebalance`) 각각 1회 호출 성공
 
 ### MVP 출시 전 즉시 실행 체크리스트 (오늘 기준)
- - [ ] cron 토큰, webhook, Supabase 키, LLM 키 선행 검증
+- [ ] cron 토큰, webhook, Supabase 키, LLM 키 선행 검증
   - 실행 스니펫:
   - `CRON_SECRET`(또는 `BRIGHTDESK_CRON_TOKEN`) / `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_JWT_SECRET`
   - `BRIGHTDESK_CRON_WEBHOOK_URL(S)` / `BRIGHTDESK_SLACK_WEBHOOK_URL` / `BRIGHTDESK_DISCORD_WEBHOOK_URL`
-  - `AI_API_KEY`, `AI_MODEL`, `AI_GATEWAY_URL`
+  - `AI_API_KEY`, `AI_MODEL`, `AI_VISION_MODEL`, `AI_GATEWAY_URL`
 - [ ] 운영 전 수동 시나리오 1회 실행 및 로그 확인
   - `curl -X POST "$APP_URL/api/public/cron/collect" -H "x-cron-secret:$CRON_SECRET"`
   - `curl -X POST "$APP_URL/api/public/cron/hourly-rebalance" -H "x-cron-secret:$CRON_SECRET"`
@@ -172,7 +177,7 @@ autonomous 투자 의사결정 보조 플랫폼(Track A: 자동 신호/리밸런
 ### 로컬 미리보기 실행 체크(완료 후 사용자 우선 체험 전)
 - 사전:
   - `APP_URL` (예: `http://localhost:5173`)
-- 다음만 우선: `CRON_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`(혹은 `VITE_SUPABASE_PUBLISHABLE_KEY`), `AI_API_KEY`(요약 단계 검증시)
+  - 다음만 우선: `CRON_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`(혹은 `VITE_SUPABASE_PUBLISHABLE_KEY`), `AI_API_KEY`, `AI_VISION_MODEL`(이미지 문서 검증시)
 - 실행 순서:
   - `bun install`(또는 기존 패키지 매니저 기준 동일)
   - `bun run dev`

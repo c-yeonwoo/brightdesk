@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { FileText, ImageIcon, Loader2, Search, Sparkles, Upload, X } from "lucide-react";
+import { FileText, ImageIcon, Loader2, RefreshCw, Search, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/kb/AppShell";
@@ -24,8 +24,16 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 
-import { getDocumentBody, listDocuments, listSources, uploadDocumentForKb } from "@/lib/kb.functions";
+import {
+  getDocumentBody,
+  listDocuments,
+  listSources,
+  refineDocumentForKb,
+  uploadDocumentForKb,
+} from "@/lib/kb.functions";
 import { formatSourceLabel, fmtDateTime } from "@/lib/kb-format";
+
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 export const Route = createFileRoute("/documents")({
   head: () => ({
@@ -196,6 +204,11 @@ function DocsPage() {
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0] ?? null;
+                  if (file && file.size > MAX_UPLOAD_BYTES) {
+                    toast.error("파일은 8MB 이하만 업로드할 수 있습니다.");
+                    e.currentTarget.value = "";
+                    return;
+                  }
                   setUploadFile(file);
                   if (file && !uploadTitle.trim()) setUploadTitle(file.name.replace(/\.[^.]+$/, ""));
                 }}
@@ -382,10 +395,22 @@ function SparkUploadIcon({ file }: { file: File | null }) {
 }
 
 function DocSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
+  const qc = useQueryClient();
   const { data: doc, isLoading } = useQuery({
     queryKey: ["doc", id],
     queryFn: () => getDocumentBody({ data: { id: id! } }),
     enabled: !!id,
+  });
+  const refineMut = useMutation({
+    mutationFn: () => refineDocumentForKb({ data: { id: id! } }),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["doc", id] });
+      qc.invalidateQueries({ queryKey: ["docs"] });
+      toast.success(`KB 정제 완료 · fact ${result.facts}개`);
+    },
+    onError: (error: any) => {
+      toast.error(error?.message ?? "KB 정제 실패");
+    },
   });
   const d = doc as any;
   return (
@@ -414,6 +439,21 @@ function DocSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
                 {d.processed_at ? `처리 ${fmtDateTime(d.processed_at)}` : "미처리"}
               </SheetDescription>
             </SheetHeader>
+            <div className="mt-4 flex flex-wrap gap-2 px-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => refineMut.mutate()}
+                disabled={refineMut.isPending}
+              >
+                {refineMut.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                KB 정제 재실행
+              </Button>
+            </div>
             <div className="mt-4 grid grid-cols-2 gap-3 px-1">
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">

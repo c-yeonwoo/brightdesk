@@ -3,7 +3,7 @@
 ## Overview
 
 - 프로젝트명: BrightDesk
-- 목표: 투자 의사결정 보조(MVP) 플랫폼
+- 목표: 시장 흐름을 읽고 섹터/종목/ETF 후보와 포트폴리오 반영 방향을 제안하는 투자 의사결정 보조(MVP) 플랫폼
 - 운영 범위: 수집 파이프라인, 신호 생성, 포트폴리오 실행(권고), 결과 추적, 파이프라인 모니터링
 - 핵심 동작 흐름
   1) 외부 소스 RSS/Atom 수집
@@ -15,6 +15,8 @@
 - 현재 스택 확정: **Supabase + TanStack Start(TypeScript) + PostgreSQL + 크론 기반 자동화**
   - Python은 보조 워커 확장 후보로만 유지
   - `source_registry`/`pipeline_version` 기반으로 수집소스·정제 버전 추적 확장성 확보
+  - 배포 기준: Vercel + Supabase 웹앱
+  - ADR: `docs/adr/0001-mvp-webapp-architecture.md`
 
 ## PO 정리 (문제점·개선·우선순위)
 
@@ -111,6 +113,14 @@
   - `source_registry`에 소스 키/표시명/파싱 버전 등록
   - CollectorConfig에 환경변수/파서/신뢰도 정책 추가
   - `registerCollector` 또는 `buildCollectors` 확장
+
+### 수동 문서 입력
+- 지원 입력: text, `.txt`, `.md`, PDF, image(`png`, `jpg`, `webp`)
+- 저장 위치: `raw_documents` (`source = manual_upload`)
+- PDF: 서버에서 텍스트 추출 후 KB 정제
+- Image: AI vision 기반 OCR/요약 후 KB 정제
+- 문서 상세: 원문, 처리 상태, 생성된 KB facts, 정제 재실행 버튼 제공
+- MVP 제한: 파일 8MB 이하
 
 ---
 
@@ -234,6 +244,9 @@
 ### P0 (출시 전 필수)
 - [x] cron 인증 헤더/비밀키 설정(서버 차단) — 코드 적용 완료
   - `BRIGHTDESK_CRON_TOKEN`, 회전/폐기 규칙 포함
+- [x] Lovable 의존성 제거 및 독립 Vercel/Supabase 웹앱 전환
+- [x] text/PDF/image 문서 입력 → raw_documents → KB facts 정제 흐름
+- [x] 문서별 생성 fact 확인 및 KB 정제 재실행 UX
 - [ ] `/pipeline` 수동 수집/정제 경로 1회 이상 실행 및 알림 확인(사용자 로컬 체크 필요)
 - [ ] `cron.collect`, `cron.hourly-rebalance` 수동 POST smoke test 통과(권고)
 - [ ] 알림 채널(W/C) 1회 이상 수신 성공(권고)
