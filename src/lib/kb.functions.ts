@@ -435,7 +435,18 @@ export const getDocumentBody = createServerFn({ method: "GET" })
       .eq("id", data.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    return row;
+
+    const { data: facts, error: factsError } = await sb
+      .from("kb_facts")
+      .select("id,domain,title,summary,reliability,sentiment,related_tickers,updated_at,is_active")
+      .contains("source_doc_ids", [data.id])
+      .order("updated_at", { ascending: false });
+    if (factsError) throw new Error(factsError.message);
+
+    return {
+      ...(row as any),
+      derived_facts: facts ?? [],
+    };
   });
 
 export const listTickerSuggestions = createServerFn({ method: "GET" }).handler(async () => {

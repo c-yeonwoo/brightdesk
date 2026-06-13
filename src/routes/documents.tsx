@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { FileText, ImageIcon, Loader2, Search, Upload, X } from "lucide-react";
+import { FileText, ImageIcon, Loader2, Search, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/kb/AppShell";
@@ -123,10 +123,16 @@ function DocsPage() {
       setUploadFile(null);
       qc.invalidateQueries({ queryKey: ["docs"] });
       qc.invalidateQueries({ queryKey: ["kb-sources"] });
+      if (result?.id) {
+        setSelectedId(result.id);
+        qc.invalidateQueries({ queryKey: ["doc", result.id] });
+      }
       toast.success(
         result?.refine?.ok
           ? `문서 분석 완료 · fact ${result.refine.facts}개`
-          : "문서가 KB 큐에 저장되었습니다.",
+          : result?.refine?.error
+            ? `문서 저장 완료 · 정제 확인 필요: ${result.refine.error}`
+            : "문서가 KB 큐에 저장되었습니다.",
       );
     },
     onError: (error: any) => {
@@ -427,6 +433,63 @@ function DocSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
               <pre className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/20 p-3 font-sans text-sm leading-relaxed">
                 {d.body ?? "(본문 없음)"}
               </pre>
+            </div>
+            <div className="mt-4 px-1">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  생성된 KB Facts
+                </div>
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {(d.derived_facts ?? []).length}개
+                </span>
+              </div>
+              {(d.derived_facts ?? []).length === 0 ? (
+                <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-center text-xs text-muted-foreground">
+                  아직 이 문서에서 생성된 fact가 없습니다. 처리 대기이거나 AI 정제 결과가 비어 있을 수 있습니다.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(d.derived_facts ?? []).map((fact: any) => (
+                    <div key={fact.id} className="rounded-lg border bg-background p-3">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium uppercase text-secondary-foreground">
+                          {fact.domain}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          신뢰도 {Math.round(Number(fact.reliability ?? 0.5) * 100)}%
+                        </span>
+                        <span
+                          className="text-[11px]"
+                          style={{
+                            color:
+                              Number(fact.sentiment ?? 0) >= 0
+                                ? "var(--success)"
+                                : "var(--danger)",
+                          }}
+                        >
+                          sentiment {Number(fact.sentiment ?? 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="text-sm font-medium">{fact.title}</div>
+                      {fact.summary && (
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                          {fact.summary}
+                        </div>
+                      )}
+                      {(fact.related_tickers ?? []).length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {fact.related_tickers.map((ticker: string) => (
+                            <span key={ticker} className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+                              {ticker}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         )}
