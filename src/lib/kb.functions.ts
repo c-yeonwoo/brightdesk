@@ -1,7 +1,119 @@
+import { createHash } from "crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const DOMAINS = ["macro", "theme", "news", "politics"] as const;
+const DOCUMENT_UPLOAD_SOURCE = "manual_upload";
+
+const DocumentUploadSchema = z.object({
+  title: z.string().trim().min(1).max(240),
+  text: z.string().max(200_000).optional(),
+  fileName: z.string().trim().max(240).optional(),
+  mimeType: z.string().trim().max(120).optional(),
+  base64: z.string().max(8_000_000).optional(),
+  reliability: z.number().min(0).max(1).optional(),
+  refine: z.boolean().optional(),
+});
+
+function normalizeUploadedText(text: string) {
+  return text.replace(/\r\n/g, "\n").replace(/\n{4,}/g, "\n\n").trim();
+}
+
+function hashUploadedDocument(input: {
+  title: string;
+  text: string;
+  fileName?: string;
+  mimeType?: string;
+}) {
+  return createHash("sha256")
+    .update(`${DOCUMENT_UPLOAD_SOURCE}::${input.fileName ?? input.title}::${input.mimeType ?? ""}::${input.text.slice(0, 8192)}`)
+    .digest("hex");
+}
+
+function dataUrlFromBase64(base64: string, mimeType: string) {
+  const clean = base64.includes(",") ? base64.split(",").pop() ?? "" : base64;
+  return `data:${mimeType};base64,${clean}`;
+}
+
+function bufferFromBase64(base64: string) {
+  const clean = base64.includes(",") ? base64.split(",").pop() ?? "" : base64;
+  return Buffer.from(clean, "base64");
+}
+
+async function extractPdfText(base64: string) {
+  const { PDFParse } = await import("pdf-parse");
+  const parser = new PDFParse({ data: bufferFromBase64(base64) });
+  try {
+    const result = await parser.getText();
+    return normalizeUploadedText(result.text ?? "");
+  } finally {
+    await parser.destroy();
+  }
+}
+
+async function extractImageTextWithAi(args: {
+  title: string;
+  fileName?: string;
+  mimeType: string;
+  base64: string;
+}) {
+  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY;
+  const model = process.env.AI_VISION_MODEL || process.env.AI_MODEL || "gpt-4.1-mini";
+  const baseUrl = process.env.AI_GATEWAY_URL || "https://api.openai.com/v1/chat/completions";
+  if (!apiKey) {
+    throw new Error("PDF/Image 분석에는 AI_API_KEY 또는 OPENAI_API_KEY가 필요합니다.");
+  }
+
+  if (!args.mimeType.startsWith("image/")) {
+    throw new Error("이미지 분석에는 image/* 형식이 필요합니다.");
+  }
+
+  const prompt = `다음 투자 관련 문서에서 텍스트를 추출하고 한국어로 정리해 주세요.
+
+문서명: ${args.fileName ?? args.title}
+형식: ${args.mimeType}
+
+반환 규칙:
+- 원문 핵심 텍스트를 최대한 보존
+- 표/이미지는 투자 판단에 필요한 내용 중심으로 문장화
+- 매크로, 국제정세, 산업 흐름, 기업/ETF, 리스크 관련 내용을 빠뜨리지 않기
+- 결과는 plain text만 반환`;
+
+  const content = [
+    { type: "text", text: prompt },
+    {
+      type: "image_url",
+      image_url: {
+        url: dataUrlFromBase64(args.base64, args.mimeType),
+      },
+    },
+  ];
+
+  const res = await fetch(baseUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: "system",
+          content:
+            "너는 투자 문서 OCR/정리 파이프라인이다. 문서 내용을 KB 정제에 넣기 좋은 plain text로 추출한다.",
+        },
+        { role: "user", content },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`AI file extraction failed ${res.status}: ${body}`);
+  }
+  const json = await res.json();
+  return String(json.choices?.[0]?.message?.content ?? "").trim();
+}
 
 export const getOverview = createServerFn({ method: "GET" }).handler(async () => {
   const { getKbClient } = await import("./kb-client.server");
@@ -79,6 +191,93 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
     activeFacts: facts.filter((f) => f.is_active).length,
   };
 });
+
+export const uploadDocumentForKb = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => DocumentUploadSchema.parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const mimeType = data.mimeType || "text/plain";
+    let body = normalizeUploadedText(data.text ?? "");
+    let extraction: "text" | "ai_file" = "text";
+
+    if (!body && data.base64) {
+      body = normalizeUploadedText(
+        mimeType === "application/pdf"
+          ? await extractPdfText(data.base64)
+          : await extractImageTextWithAi({
+              title: data.title,
+              fileName: data.fileName,
+              mimeType,
+              base64: data.base64,
+            }),
+      );
+      extraction = mimeType === "application/pdf" ? "text" : "ai_file";
+    }
+
+    if (!body || body.length < 20) {
+      throw new Error("문서에서 분석 가능한 텍스트를 찾지 못했습니다.");
+    }
+
+    const contentHash = hashUploadedDocument({
+      title: data.title,
+      text: body,
+      fileName: data.fileName,
+      mimeType,
+    });
+
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from("raw_documents")
+      .select("id,processed_at")
+      .eq("content_hash", contentHash)
+      .maybeSingle();
+    if (existingError) throw new Error(existingError.message);
+
+    let docId = (existing as any)?.id as string | undefined;
+    let inserted = false;
+
+    if (!docId) {
+      const { data: row, error } = await (supabaseAdmin.from("raw_documents") as any)
+        .insert({
+          source: DOCUMENT_UPLOAD_SOURCE,
+          external_id: `manual:${data.fileName ?? data.title}:${contentHash.slice(0, 12)}`,
+          content_hash: contentHash,
+          title: data.title,
+          body,
+          reliability: data.reliability ?? 0.72,
+          published_at: new Date().toISOString(),
+          meta: {
+            upload_kind: mimeType.startsWith("image/") ? "image" : mimeType === "application/pdf" ? "pdf" : "text",
+            file_name: data.fileName ?? null,
+            mime_type: mimeType,
+            extraction,
+          },
+          source_profile_key: DOCUMENT_UPLOAD_SOURCE,
+          pipeline_version: "kb-facts-v1",
+        })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      docId = row.id;
+      inserted = true;
+    }
+
+    let refineResult: { ok: boolean; facts: number; error?: string } | null = null;
+    if (data.refine !== false && docId && !(existing as any)?.processed_at) {
+      const { refineOne } = await import("./collectors.server");
+      refineResult = await refineOne(docId);
+    }
+
+    return {
+      ok: true,
+      id: docId,
+      inserted,
+      duplicated: !inserted,
+      extraction,
+      chars: body.length,
+      refine: refineResult,
+    };
+  });
 
 export const listFacts = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) =>
