@@ -6,8 +6,9 @@ const DOMAINS = ["macro", "theme", "news", "politics"] as const;
 const DOCUMENT_UPLOAD_SOURCE = "manual_upload";
 
 const DocumentUploadSchema = z.object({
-  title: z.string().trim().min(1).max(240),
+  title: z.string().trim().max(240).optional(),
   text: z.string().max(200_000).optional(),
+  url: z.string().trim().url().max(2000).optional(),
   fileName: z.string().trim().max(240).optional(),
   mimeType: z.string().trim().max(120).optional(),
   base64: z.string().max(8_000_000).optional(),
@@ -17,6 +18,57 @@ const DocumentUploadSchema = z.object({
 
 function normalizeUploadedText(text: string) {
   return text.replace(/\r\n/g, "\n").replace(/\n{4,}/g, "\n\n").trim();
+}
+
+function htmlToText(html: string) {
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<\/(p|div|section|article|h[1-6]|li|tr)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function extractHtmlTitle(html: string) {
+  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+  return title ? htmlToText(title).slice(0, 180) : null;
+}
+
+async function fetchWebPageText(url: string) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "BrightDesk-DocumentIngest/1.0",
+        Accept: "text/html,text/plain,application/xhtml+xml,*/*",
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`웹페이지 요청 실패: ${res.status} ${res.statusText}`);
+    }
+    const contentType = res.headers.get("content-type") ?? "";
+    const raw = await res.text();
+    const title = contentType.includes("html") ? extractHtmlTitle(raw) : null;
+    const text = contentType.includes("html") ? htmlToText(raw) : normalizeUploadedText(raw);
+    return {
+      title,
+      text: normalizeUploadedText(text).slice(0, 200_000),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function hashUploadedDocument(input: {
@@ -197,9 +249,17 @@ export const uploadDocumentForKb = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const mimeType = data.mimeType || "text/plain";
+    const mimeType = data.url ? "text/html" : data.mimeType || "text/plain";
     let body = normalizeUploadedText(data.text ?? "");
     let extraction: "text" | "ai_file" = "text";
+    let title = data.title?.trim() || data.fileName || data.url || "수동 업로드 문서";
+
+    if (!body && data.url) {
+      const web = await fetchWebPageText(data.url);
+      body = web.text;
+      title = data.title?.trim() || web.title || data.url;
+      extraction = "text";
+    }
 
     if (!body && data.base64) {
       body = normalizeUploadedText(
@@ -220,9 +280,9 @@ export const uploadDocumentForKb = createServerFn({ method: "POST" })
     }
 
     const contentHash = hashUploadedDocument({
-      title: data.title,
+      title,
       text: body,
-      fileName: data.fileName,
+      fileName: data.fileName ?? data.url,
       mimeType,
     });
 
@@ -240,16 +300,23 @@ export const uploadDocumentForKb = createServerFn({ method: "POST" })
       const { data: row, error } = await (supabaseAdmin.from("raw_documents") as any)
         .insert({
           source: DOCUMENT_UPLOAD_SOURCE,
-          external_id: `manual:${data.fileName ?? data.title}:${contentHash.slice(0, 12)}`,
+          external_id: data.url ?? `manual:${data.fileName ?? title}:${contentHash.slice(0, 12)}`,
           content_hash: contentHash,
-          title: data.title,
+          title,
           body,
           reliability: data.reliability ?? 0.72,
           published_at: new Date().toISOString(),
           meta: {
-            upload_kind: mimeType.startsWith("image/") ? "image" : mimeType === "application/pdf" ? "pdf" : "text",
+            upload_kind: data.url
+              ? "web_url"
+              : mimeType.startsWith("image/")
+                ? "image"
+                : mimeType === "application/pdf"
+                  ? "pdf"
+                  : "text",
             file_name: data.fileName ?? null,
             mime_type: mimeType,
+            source_url: data.url ?? null,
             extraction,
           },
           source_profile_key: DOCUMENT_UPLOAD_SOURCE,

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { FileText, ImageIcon, Loader2, RefreshCw, Search, Sparkles, Upload, X } from "lucide-react";
+import { FileText, ImageIcon, LinkIcon, Loader2, RefreshCw, Search, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/kb/AppShell";
@@ -62,6 +62,7 @@ function DocsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadText, setUploadText] = useState("");
+  const [uploadUrl, setUploadUrl] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   const { data: catalog = [] as { source: string; count: number }[] } = useQuery({
@@ -87,7 +88,17 @@ function DocsPage() {
 
   const uploadMut = useMutation({
     mutationFn: async () => {
-      const title = uploadTitle.trim() || uploadFile?.name || "수동 업로드 문서";
+      const title = uploadTitle.trim() || uploadFile?.name || uploadUrl.trim() || "수동 업로드 문서";
+      if (uploadUrl.trim()) {
+        return uploadDocumentForKb({
+          data: {
+            title,
+            url: uploadUrl.trim(),
+            reliability: 0.68,
+            refine: true,
+          },
+        });
+      }
       if (uploadFile) {
         const mimeType = uploadFile.type || guessMimeType(uploadFile.name);
         if (mimeType === "text/plain" || uploadFile.name.toLowerCase().endsWith(".md")) {
@@ -128,6 +139,7 @@ function DocsPage() {
     onSuccess: (result: any) => {
       setUploadTitle("");
       setUploadText("");
+      setUploadUrl("");
       setUploadFile(null);
       qc.invalidateQueries({ queryKey: ["docs"] });
       qc.invalidateQueries({ queryKey: ["kb-sources"] });
@@ -150,7 +162,9 @@ function DocsPage() {
 
   const canUpload =
     !uploadMut.isPending &&
-    ((uploadText.trim().length >= 20 && uploadTitle.trim().length > 0) || uploadFile != null);
+    (uploadUrl.trim().length > 0 ||
+      (uploadText.trim().length >= 20 && uploadTitle.trim().length > 0) ||
+      uploadFile != null);
 
   return (
     <AppShell>
@@ -172,7 +186,7 @@ function DocsPage() {
               문서 넣기
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              텍스트, PDF, 이미지를 넣으면 원문 저장 후 KB fact로 자동 분류합니다.
+              웹페이지 링크, 텍스트, PDF, 이미지를 넣으면 원문 저장 후 KB fact로 자동 분류합니다.
             </p>
           </div>
           <Button
@@ -197,11 +211,24 @@ function DocsPage() {
               placeholder="문서 제목"
               className="h-9 text-sm"
             />
+            <div className="relative">
+              <LinkIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={uploadUrl}
+                onChange={(e) => {
+                  setUploadUrl(e.target.value);
+                  if (e.target.value.trim()) setUploadFile(null);
+                }}
+                placeholder="웹페이지 링크 붙여넣기"
+                className="h-9 pl-8 text-sm"
+              />
+            </div>
             <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-background px-4 py-5 text-center transition-colors hover:bg-muted/40">
               <input
                 type="file"
                 accept=".txt,.md,.pdf,image/png,image/jpeg,image/webp"
                 className="hidden"
+                disabled={uploadUrl.trim().length > 0}
                 onChange={(e) => {
                   const file = e.target.files?.[0] ?? null;
                   if (file && file.size > MAX_UPLOAD_BYTES) {
@@ -222,14 +249,14 @@ function DocsPage() {
                 {uploadFile ? uploadFile.name : "PDF / 이미지 / 텍스트 파일 선택"}
               </div>
               <div className="text-xs text-muted-foreground">
-                PDF는 서버에서 텍스트를 추출하고, 이미지는 AI vision으로 OCR합니다.
+                링크는 서버에서 본문을 추출하고, PDF는 텍스트 추출, 이미지는 AI vision으로 OCR합니다.
               </div>
             </label>
           </div>
           <Textarea
             value={uploadText}
             onChange={(e) => setUploadText(e.target.value)}
-            disabled={uploadFile != null}
+            disabled={uploadFile != null || uploadUrl.trim().length > 0}
             placeholder="텍스트를 직접 붙여넣을 수도 있습니다. 예: FOMC 요약, 리서치 노트, 기사 전문, 투자 메모..."
             className="min-h-36 resize-y text-sm leading-6"
           />

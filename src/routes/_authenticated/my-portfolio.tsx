@@ -1,11 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Sparkles, Loader2, FileUp } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Trash2, Sparkles, Loader2, FileUp } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
 import { SignalCard } from "@/components/kb/SignalCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { listTickerSuggestions } from "@/lib/kb.functions";
 import {
   generateRebalanceRecommendation,
   saveUserHoldings,
@@ -25,6 +36,22 @@ export const Route = createFileRoute("/_authenticated/my-portfolio")({
 
 interface Row { ticker: string; qty: string; avg_price: string }
 const EMPTY: Row = { ticker: "", qty: "", avg_price: "" };
+const QUICK_TICKERS = [
+  { ticker: "SPY", label: "S&P 500 ETF" },
+  { ticker: "QQQ", label: "Nasdaq 100 ETF" },
+  { ticker: "SMH", label: "Semiconductor ETF" },
+  { ticker: "SOXX", label: "iShares Semiconductor ETF" },
+  { ticker: "XLK", label: "Technology ETF" },
+  { ticker: "TLT", label: "Long Treasury ETF" },
+  { ticker: "GLD", label: "Gold ETF" },
+  { ticker: "XLE", label: "Energy ETF" },
+  { ticker: "NVDA", label: "NVIDIA" },
+  { ticker: "MSFT", label: "Microsoft" },
+  { ticker: "AVGO", label: "Broadcom" },
+  { ticker: "005930.KS", label: "삼성전자" },
+  { ticker: "000660.KS", label: "SK하이닉스" },
+  { ticker: "035420.KS", label: "NAVER" },
+];
 
 function MyPortfolioPage() {
   const qc = useQueryClient();
@@ -35,6 +62,10 @@ function MyPortfolioPage() {
   const { data: history } = useQuery({
     queryKey: ["rec-history"],
     queryFn: () => listRecommendations({ data: { limit: 5 } }),
+  });
+  const { data: tickerSuggestions = [] } = useQuery({
+    queryKey: ["ticker-suggestions"],
+    queryFn: () => listTickerSuggestions(),
   });
 
   const [rows, setRows] = useState<Row[]>([EMPTY]);
@@ -136,12 +167,10 @@ function MyPortfolioPage() {
                 key={i}
                 className="grid grid-cols-[1fr_70px_90px_32px] gap-2 rounded-md border border-transparent p-1 sm:border-0 sm:p-0"
               >
-                <Input
+                <TickerPicker
                   value={r.ticker}
-                  onChange={(e) => setRow(i, { ticker: e.target.value })}
-                  placeholder="005930.KS"
-                  className="h-10 text-xs sm:h-8"
-                  aria-label="티커"
+                  onChange={(ticker) => setRow(i, { ticker })}
+                  suggestions={tickerSuggestions}
                 />
                 <Input
                   value={r.qty}
@@ -282,4 +311,94 @@ function MyPortfolioPage() {
       </div>
     </AppShell>
   );
+}
+
+function TickerPicker({
+  value,
+  onChange,
+  suggestions,
+}: {
+  value: string;
+  onChange: (ticker: string) => void;
+  suggestions: { ticker: string; count?: number }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const merged = mergeTickerSuggestions(suggestions);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-xs shadow-sm hover:bg-muted/40 sm:h-8",
+            !value && "text-muted-foreground",
+          )}
+          aria-label="티커"
+        >
+          <span className="truncate font-mono">{value || "티커 검색"}</span>
+          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[300px] p-0">
+        <Command>
+          <CommandInput
+            placeholder="티커, ETF, 종목명 검색..."
+            value={value}
+            onValueChange={(next) => onChange(next.toUpperCase())}
+          />
+          <CommandList>
+            <CommandEmpty>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-xs text-primary hover:bg-muted"
+                onClick={() => {
+                  if (value.trim()) {
+                    onChange(value.trim().toUpperCase());
+                    setOpen(false);
+                  }
+                }}
+              >
+                입력값 그대로 사용
+              </button>
+            </CommandEmpty>
+            <CommandGroup heading="빠른 선택">
+              {merged.map((item) => (
+                <CommandItem
+                  key={item.ticker}
+                  value={`${item.ticker} ${item.label ?? ""}`}
+                  onSelect={() => {
+                    onChange(item.ticker);
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn("h-3.5 w-3.5", value.toUpperCase() === item.ticker ? "opacity-100" : "opacity-0")} />
+                  <div className="min-w-0">
+                    <div className="font-mono text-xs font-semibold">{item.ticker}</div>
+                    {item.label && <div className="truncate text-[11px] text-muted-foreground">{item.label}</div>}
+                  </div>
+                  {item.count ? (
+                    <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      KB {item.count}
+                    </span>
+                  ) : null}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function mergeTickerSuggestions(suggestions: { ticker: string; count?: number }[]) {
+  const map = new Map<string, { ticker: string; label?: string; count?: number }>();
+  for (const item of QUICK_TICKERS) map.set(item.ticker, item);
+  for (const item of suggestions ?? []) {
+    const ticker = item.ticker.toUpperCase();
+    const current = map.get(ticker);
+    map.set(ticker, { ticker, label: current?.label, count: item.count });
+  }
+  return Array.from(map.values()).slice(0, 40);
 }
