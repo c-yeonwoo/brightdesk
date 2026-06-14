@@ -44,8 +44,12 @@ import {
   relativeTime,
 } from "@/lib/kb-format";
 import type { KbFact } from "@/lib/kb-client.server";
+import { requireClientAdmin } from "@/lib/access-control";
 
 export const Route = createFileRoute("/facts")({
+  beforeLoad: async () => {
+    await requireClientAdmin();
+  },
   head: () => ({
     meta: [
       { title: "KB Facts · KB Monitor" },

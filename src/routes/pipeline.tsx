@@ -12,8 +12,12 @@ import {
 } from "@/lib/pipeline.functions";
 import { formatSourceLabel, relativeTime } from "@/lib/kb-format";
 import type { KbDomain } from "@/lib/kb-client.server";
+import { requireClientAdmin } from "@/lib/access-control";
 
 export const Route = createFileRoute("/pipeline")({
+  beforeLoad: async () => {
+    await requireClientAdmin();
+  },
   head: () => ({
     meta: [
       { title: "파이프라인 · KB Monitor" },

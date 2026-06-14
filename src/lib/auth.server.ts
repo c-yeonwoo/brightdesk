@@ -24,7 +24,16 @@ function getSupabasePublishableClient() {
   });
 }
 
-export async function requireAuthenticatedUser(): Promise<string> {
+function adminEmails() {
+  return new Set(
+    (process.env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+export async function requireAuthenticatedClaims() {
   const req = getRequest();
   const authorization = req?.headers.get("authorization");
   if (!authorization) {
@@ -47,10 +56,23 @@ export async function requireAuthenticatedUser(): Promise<string> {
     throw new Error("Unauthorized: Invalid token.");
   }
 
-  const userId = data.claims.sub;
-  if (!userId) {
+  if (!data.claims.sub) {
     throw new Error("Unauthorized: No user id in token.");
   }
 
-  return userId;
+  return data.claims;
+}
+
+export async function requireAuthenticatedUser(): Promise<string> {
+  const claims = await requireAuthenticatedClaims();
+  return claims.sub as string;
+}
+
+export async function requireAdminUser(): Promise<string> {
+  const claims = await requireAuthenticatedClaims();
+  const email = typeof claims.email === "string" ? claims.email.toLowerCase() : "";
+  if (!email || !adminEmails().has(email)) {
+    throw new Error("Forbidden: Admin access required.");
+  }
+  return claims.sub as string;
 }

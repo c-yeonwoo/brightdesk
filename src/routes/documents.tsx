@@ -32,10 +32,14 @@ import {
   uploadDocumentForKb,
 } from "@/lib/kb.functions";
 import { formatSourceLabel, fmtDateTime } from "@/lib/kb-format";
+import { requireClientAdmin } from "@/lib/access-control";
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 export const Route = createFileRoute("/documents")({
+  beforeLoad: async () => {
+    await requireClientAdmin();
+  },
   head: () => ({
     meta: [
       { title: "원본 문서 · KB Monitor" },

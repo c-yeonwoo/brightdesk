@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireAdminUser } from "./auth.server";
 
 export const triggerCollection = createServerFn({ method: "POST" }).handler(async () => {
+  await requireAdminUser();
   const { runCollection } = await import("./collectors.server");
   return runCollection();
 });
@@ -11,11 +13,13 @@ export const triggerRefiner = createServerFn({ method: "POST" })
     z.object({ limit: z.number().int().min(1).max(50).optional() }).parse(d ?? {}),
   )
   .handler(async ({ data }) => {
+    await requireAdminUser();
     const { runRefiner } = await import("./collectors.server");
     return runRefiner(data.limit ?? 10);
   });
 
 export const getPipelineStatus = createServerFn({ method: "GET" }).handler(async () => {
+  await requireAdminUser();
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const namespaceEscalationThreshold = Math.max(

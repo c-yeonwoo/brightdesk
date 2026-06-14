@@ -18,8 +18,12 @@ import {
   listSignals,
 } from "@/lib/signals.functions";
 import { fmtDateTime, relativeTime } from "@/lib/kb-format";
+import { requireClientUser } from "@/lib/access-control";
 
 export const Route = createFileRoute("/signals")({
+  beforeLoad: async () => {
+    await requireClientUser();
+  },
   head: () => ({
     meta: [
       { title: "시그널 · KB Monitor" },

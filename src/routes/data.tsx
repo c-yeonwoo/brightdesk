@@ -3,8 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, Database, FileText, Radio, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
 import { listCronRunHistory } from "@/lib/cron-history.functions";
+import { requireClientAdmin } from "@/lib/access-control";
 
 export const Route = createFileRoute("/data")({
+  beforeLoad: async () => {
+    await requireClientAdmin();
+  },
   head: () => ({
     meta: [
       { title: "데이터 · BrightDesk" },

@@ -14,8 +14,12 @@ import { Button } from "@/components/ui/button";
 import { getFactsByTicker, listTickerSuggestions } from "@/lib/kb.functions";
 import { DOMAIN_LABEL, fmtDateTime, relativeTime } from "@/lib/kb-format";
 import type { KbDomain, KbFact } from "@/lib/kb-client.server";
+import { requireClientAdmin } from "@/lib/access-control";
 
 export const Route = createFileRoute("/tickers")({
+  beforeLoad: async () => {
+    await requireClientAdmin();
+  },
   head: () => ({
     meta: [
       { title: "종목별 뷰 · KB Monitor" },

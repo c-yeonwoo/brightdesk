@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAdminUser } from "./auth.server";
 
 export const listCronRunHistory = createServerFn({ method: "GET" }).handler(async () => {
+  await requireAdminUser();
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await (supabaseAdmin as any)
     .from("cron_runs")

@@ -7,6 +7,7 @@ import { AlertCenter } from "./AlertCenter";
 import { PlainModeToggle } from "./PlainModeToggle";
 import { UserMenu } from "./UserMenu";
 import { getFxRate } from "@/lib/fx.functions";
+import { isCurrentUserAdmin } from "@/lib/access-control";
 
 const nav = [
   { to: "/", label: "대시보드", icon: Activity },
@@ -17,6 +18,12 @@ const nav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const { data: isAdmin = false } = useQuery({
+    queryKey: ["current-user-admin"],
+    queryFn: () => isCurrentUserAdmin(),
+    staleTime: 60 * 1000,
+  });
+  const visibleNav = nav.filter((item) => item.to !== "/data" || isAdmin);
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur">
@@ -39,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Desktop nav */}
           <nav className="hidden items-center gap-1 md:flex">
-            {nav.map((n) => {
+            {visibleNav.map((n) => {
               const active = path === n.to || (n.to !== "/" && path.startsWith(n.to));
               const Icon = n.icon;
               return (
@@ -86,8 +93,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <ul className="mx-auto grid max-w-[1400px] grid-cols-4">
-          {nav.map((n) => {
+        <ul className={`mx-auto grid max-w-[1400px] ${visibleNav.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}>
+          {visibleNav.map((n) => {
             const active = path === n.to || (n.to !== "/" && path.startsWith(n.to));
             const Icon = n.icon;
             return (

@@ -236,6 +236,36 @@ function buildCollectors(
 
 const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
   {
+    displayName: "Federal Reserve RSS",
+    kind: "rss",
+    source: "fed_rss",
+    feedEnvKey: "BRIGHTDESK_FED_RSS_URL",
+    reliability: 0.9,
+    bodySuffix: "source=federal-reserve",
+    limit: 8,
+    parserVersion: "kb-facts-v1",
+  },
+  {
+    displayName: "SEC RSS",
+    kind: "rss",
+    source: "sec_rss",
+    feedEnvKey: "BRIGHTDESK_SEC_RSS_URL",
+    reliability: 0.9,
+    bodySuffix: "source=sec",
+    limit: 8,
+    parserVersion: "kb-facts-v1",
+  },
+  {
+    displayName: "EIA RSS",
+    kind: "rss",
+    source: "eia_rss",
+    feedEnvKey: "BRIGHTDESK_EIA_RSS_URL",
+    reliability: 0.85,
+    bodySuffix: "source=eia",
+    limit: 6,
+    parserVersion: "kb-facts-v1",
+  },
+  {
     displayName: "브로커 리포트 RSS",
     kind: "rss",
     source: "broker_pdf",

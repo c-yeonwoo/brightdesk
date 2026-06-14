@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireAdminUser } from "./auth.server";
 
 const DOMAINS = ["macro", "theme", "news", "politics"] as const;
 const DOCUMENT_UPLOAD_SOURCE = "manual_upload";
@@ -247,6 +248,7 @@ export const getOverview = createServerFn({ method: "GET" }).handler(async () =>
 export const uploadDocumentForKb = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => DocumentUploadSchema.parse(d))
   .handler(async ({ data }) => {
+    await requireAdminUser();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const mimeType = data.url ? "text/html" : data.mimeType || "text/plain";
@@ -349,6 +351,7 @@ export const uploadDocumentForKb = createServerFn({ method: "POST" })
 export const refineDocumentForKb = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
+    await requireAdminUser();
     const { refineOne } = await import("./collectors.server");
     const result = await refineOne(data.id);
     if (!result.ok) {
@@ -417,6 +420,7 @@ export const listFactsByIds = createServerFn({ method: "GET" })
 export const getFactDetail = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
+    await requireAdminUser();
     const { getKbClient } = await import("./kb-client.server");
     const sb = getKbClient();
     const { data: factRaw, error } = await sb
@@ -460,6 +464,7 @@ export const listDocuments = createServerFn({ method: "GET" })
       .parse(d ?? {}),
   )
   .handler(async ({ data }) => {
+    await requireAdminUser();
     const { getKbClient } = await import("./kb-client.server");
     const sb = getKbClient();
     let q = sb
@@ -482,6 +487,7 @@ export const listDocuments = createServerFn({ method: "GET" })
   });
 
 export const listSources = createServerFn({ method: "GET" }).handler(async () => {
+  await requireAdminUser();
   const { getKbClient } = await import("./kb-client.server");
   const sb = getKbClient();
 
@@ -505,6 +511,7 @@ export const listSources = createServerFn({ method: "GET" }).handler(async () =>
 export const getDocumentBody = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
+    await requireAdminUser();
     const { getKbClient } = await import("./kb-client.server");
     const sb = getKbClient();
     const { data: row, error } = await sb
@@ -568,6 +575,7 @@ export const toggleFactActive = createServerFn({ method: "POST" })
     z.object({ id: z.string().uuid(), is_active: z.boolean() }).parse(d),
   )
   .handler(async ({ data }) => {
+    await requireAdminUser();
     const { getKbClient } = await import("./kb-client.server");
     const sb = getKbClient();
     const { error } = await (sb.from("kb_facts") as any)

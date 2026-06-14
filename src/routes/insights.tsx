@@ -27,8 +27,12 @@ import {
   YAxis,
 } from "recharts";
 import { useEffect, useState } from "react";
+import { requireClientUser } from "@/lib/access-control";
 
 export const Route = createFileRoute("/insights")({
+  beforeLoad: async () => {
+    await requireClientUser();
+  },
   head: () => ({
     meta: [
       { title: "인사이트 · BrightDesk" },
