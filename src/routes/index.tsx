@@ -1,21 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   AlertTriangle,
   ArrowRight,
   BarChart3,
   Briefcase,
+  CheckCircle2,
   Clock3,
   Compass,
   Database,
+  Layers3,
   LineChart,
   ShieldCheck,
   Sparkles,
+  Target,
   TrendingDown,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
-import { getMarketDesk } from "@/lib/market.functions";
+import { getMarketDesk, listMarketDeskHistory } from "@/lib/market.functions";
+import { usePlainMode } from "@/lib/plain-mode";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -54,10 +60,19 @@ function pct(n: number) {
   return `${Math.round(n * 100)}%`;
 }
 
+function signed(n: number) {
+  return n > 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
+}
+
 function MarketPulsePage() {
   const { data, isLoading } = useQuery({
     queryKey: ["market-desk"],
     queryFn: () => getMarketDesk(),
+    refetchInterval: 10 * 60 * 1000,
+  });
+  const { data: history } = useQuery({
+    queryKey: ["market-desk-history"],
+    queryFn: () => listMarketDeskHistory(),
     refetchInterval: 10 * 60 * 1000,
   });
 
@@ -68,12 +83,15 @@ function MarketPulsePage() {
           <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-[11px] font-medium text-muted-foreground">
             <Clock3 className="h-3.5 w-3.5" />
             {data?.generated_at ? new Date(data.generated_at).toLocaleString("ko-KR") : "Market Pulse"}
+            {data?.is_mock && (
+              <span className="ml-1 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">샘플</span>
+            )}
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h1 className="text-2xl font-semibold tracking-tight">
             오늘 시장을 읽고, 다음 후보를 고릅니다
           </h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            매크로·국제 정세·산업 흐름·신호를 모아 섹터, 종목, ETF 후보와 포트폴리오 반영 방향을 정리합니다.
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            시장 흐름, 추천 후보, 포트폴리오 반영 방향을 한 번에 확인합니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -82,7 +100,7 @@ function MarketPulsePage() {
             className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
             <Briefcase className="h-4 w-4" />
-            포트폴리오 입력
+            포트폴리오
           </Link>
           <Link
             to="/pipeline"
@@ -94,7 +112,7 @@ function MarketPulsePage() {
         </div>
       </div>
 
-      {isLoading || !data ? <Skeleton /> : <MarketPulseContent data={data as any} />}
+      {isLoading || !data ? <Skeleton /> : <MarketPulseContent data={data as any} history={(history ?? []) as any[]} />}
     </AppShell>
   );
 }
@@ -112,35 +130,104 @@ function Skeleton() {
   );
 }
 
-function MarketPulseContent({ data }: { data: any }) {
+function MarketPulseContent({ data, history }: { data: any; history: any[] }) {
+  const { plain } = usePlainMode();
   const Trend = trendIcon[data.brief.trend as keyof typeof trendIcon] ?? LineChart;
   const healthLow = data.health.facts < 3;
+  const confidence = Number(data.market_read?.confidence ?? 0.35);
+
+  if (plain) {
+    return <EasyMarketPulseContent data={data} history={history} />;
+  }
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
-        <div className="rounded-lg border bg-card p-5">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold ${
-                regimeTone[data.brief.regime as keyof typeof regimeTone]
-              }`}
-            >
-              {data.brief.regime_label}
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium">
-              <Trend className="h-3.5 w-3.5" />
-              {data.brief.trend_label}
-            </span>
-            <span className="rounded-md border bg-background px-2.5 py-1 text-xs text-muted-foreground">
-              score {Number(data.brief.score).toFixed(2)}
-            </span>
+      <section className="overflow-hidden rounded-2xl border bg-card">
+        <div className="relative grid gap-0 lg:grid-cols-[1.35fr_0.65fr]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.16),transparent_34%),radial-gradient(circle_at_top_right,rgba(14,165,233,0.14),transparent_30%)]" />
+          <div className="relative p-5 sm:p-7">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold ${
+                  regimeTone[data.brief.regime as keyof typeof regimeTone]
+                }`}
+              >
+                {data.brief.regime_label}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-md border bg-background/80 px-2.5 py-1 text-xs font-medium">
+                <Trend className="h-3.5 w-3.5" />
+                {data.brief.trend_label}
+              </span>
+              <span className="rounded-md border bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
+                market score {signed(Number(data.brief.score))}
+              </span>
+            </div>
+
+            <div className="max-w-4xl">
+              <p className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
+                <Zap className="h-4 w-4" />
+                {data.market_read?.posture ?? "시장 판단 대기"} · {data.market_read?.action_bias ?? "근거 수집 중"}
+              </p>
+              <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{data.brief.headline}</h2>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">{data.brief.summary}</p>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <DecisionMetric
+                icon={Target}
+                label="판단 확신도"
+                value={pct(confidence)}
+                helper={`데이터 깊이 ${data.market_read?.data_depth ?? "낮음"}`}
+              />
+              <DecisionMetric
+                icon={TrendingUp}
+                label="긍정 후보"
+                value={`${data.market_read?.positive_candidates ?? 0}개`}
+                helper="확대/유지/관심 후보"
+              />
+              <DecisionMetric
+                icon={ShieldCheck}
+                label="방어 체크"
+                value={`${data.market_read?.defensive_candidates ?? 0}개`}
+                helper="축소/회피 후보"
+              />
+            </div>
           </div>
 
-          <h2 className="text-xl font-semibold tracking-tight">{data.brief.headline}</h2>
-          <p className="mt-3 max-w-4xl text-sm leading-6 text-muted-foreground">{data.brief.summary}</p>
+          <div className="relative border-t bg-background/45 p-5 sm:p-7 lg:border-l lg:border-t-0">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <Activity className="h-4 w-4" />
+                전문가 액션 보드
+              </h2>
+              <span className="rounded-md border bg-card px-2 py-1 text-[11px] text-muted-foreground">상세</span>
+            </div>
+            <div className="space-y-2">
+              {(data.next_actions ?? []).slice(0, 3).map((action: string, index: number) => (
+                <div key={action} className="rounded-xl border bg-card/85 p-3">
+                  <div className="mb-1 flex items-center gap-2 text-xs font-semibold">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] text-primary-foreground">
+                      {index + 1}
+                    </span>
+                    우선순위 {index + 1}
+                  </div>
+                  <p className="text-xs leading-5 text-muted-foreground">{action}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
-          <div className="mt-5 flex flex-wrap gap-2">
+      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+        <div className="rounded-2xl border bg-card p-5">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-semibold">
+              <Layers3 className="h-3.5 w-3.5" />
+              활성 테마
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {(data.brief.active_themes ?? []).slice(0, 8).map((theme: string) => (
               <span key={theme} className="rounded-md bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
                 {theme.replaceAll("_", " ")}
@@ -152,12 +239,17 @@ function MarketPulseContent({ data }: { data: any }) {
               </span>
             )}
           </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {(data.portfolio.allocation_guidance ?? []).map((item: any) => (
+              <AllocationTile key={item.label} item={item} />
+            ))}
+          </div>
         </div>
 
-        <div className="rounded-lg border bg-card p-5">
+        <div className="rounded-2xl border bg-card p-5">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <ShieldCheck className="h-4 w-4" />
-            MVP 운영 상태
+            데이터 상태
           </h2>
           <div className="mt-4 grid gap-3">
             <Metric label="최근 KB facts" value={data.health.facts} />
@@ -170,11 +262,22 @@ function MarketPulseContent({ data }: { data: any }) {
                 <AlertTriangle className="h-3.5 w-3.5" />
                 데이터가 아직 얇습니다
               </div>
-              RSS 소스와 AI 정제를 연결하면 추천 근거가 더 선명해집니다.
+              자료를 더 넣으면 판단 근거가 선명해집니다.
+            </div>
+          )}
+          {(data.risk_alerts ?? []).length > 0 && (
+            <div className="mt-3 space-y-2">
+              {data.risk_alerts.slice(0, 2).map((risk: string) => (
+                <div key={risk} className="rounded-md border border-danger/20 bg-danger/5 p-3 text-xs leading-5 text-danger">
+                  {risk}
+                </div>
+              ))}
             </div>
           )}
         </div>
       </section>
+
+      <PaperPortfolioCard data={data.paper_portfolio} expert />
 
       <section>
         <div className="mb-3 flex items-center justify-between">
@@ -194,8 +297,10 @@ function MarketPulseContent({ data }: { data: any }) {
         </div>
       </section>
 
+      <MarketHistoryPanel history={history} expert />
+
       <section className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
-        <div className="rounded-lg border bg-card p-5">
+        <div className="rounded-2xl border bg-card p-5">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <Briefcase className="h-4 w-4" />
             포트폴리오 반영 방향
@@ -216,7 +321,7 @@ function MarketPulseContent({ data }: { data: any }) {
           </div>
         </div>
 
-        <div className="rounded-lg border bg-card p-5">
+        <div className="rounded-2xl border bg-card p-5">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <Compass className="h-4 w-4" />
             오늘의 근거
@@ -224,7 +329,7 @@ function MarketPulseContent({ data }: { data: any }) {
           <div className="mt-4 divide-y">
             {data.sources.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
-                수집/정제가 실행되면 여기에 시장 판단 근거가 표시됩니다.
+                갱신 후 판단 근거가 표시됩니다.
               </div>
             ) : (
               data.sources.slice(0, 5).map((source: any) => (
@@ -251,6 +356,335 @@ function MarketPulseContent({ data }: { data: any }) {
   );
 }
 
+function EasyMarketPulseContent({ data, history }: { data: any; history: any[] }) {
+  const Trend = trendIcon[data.brief.trend as keyof typeof trendIcon] ?? LineChart;
+  const topPick = (data.opportunities ?? [])[0];
+  const secondPick = (data.opportunities ?? [])[1];
+  const risk = (data.risk_alerts ?? [])[0];
+
+  return (
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-3xl border bg-card">
+        <div className="relative p-5 sm:p-8">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(34,197,94,0.18),transparent_34%),radial-gradient(circle_at_90%_15%,rgba(251,191,36,0.16),transparent_30%)]" />
+          <div className="relative">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border bg-background/80 px-3 py-1 text-xs font-semibold">
+              <Trend className="h-4 w-4" />
+              요약
+            </div>
+            <h2 className="max-w-4xl text-3xl font-semibold tracking-tight sm:text-4xl">
+              지금은 <span className="text-primary">{data.market_read?.posture ?? data.brief.regime_label}</span> 장세입니다
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+              {data.market_read?.action_bias ?? data.brief.summary}
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <EasyAnswer label="시장 분위기" value={data.brief.regime_label} helper={data.brief.trend_label} />
+              <EasyAnswer label="확신 정도" value={pct(Number(data.market_read?.confidence ?? 0.35))} helper="근거와 함께 확인" />
+              <EasyAnswer label="먼저 볼 후보" value={topPick?.symbol ?? "대기"} helper={topPick?.action_label ?? "대기"} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="rounded-3xl border bg-card p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
+            <Activity className="h-4 w-4 text-primary" />
+            오늘 볼 것
+          </h2>
+          <div className="space-y-3">
+            {(data.next_actions ?? []).slice(0, 3).map((action: string, index: number) => (
+              <div key={action} className="rounded-2xl border bg-background p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
+                    {index + 1}
+                  </span>
+                  {index === 0 ? "가장 먼저" : index === 1 ? "그 다음" : "마지막으로"}
+                </div>
+                <p className="text-sm leading-6 text-muted-foreground">{action}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border bg-card p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
+            <Sparkles className="h-4 w-4 text-primary" />
+            우선 후보
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {topPick && <EasyOpportunityCard item={topPick} rank={1} />}
+            {secondPick && <EasyOpportunityCard item={secondPick} rank={2} />}
+          </div>
+          <Link
+            to="/signals"
+            className="mt-4 inline-flex h-10 items-center gap-2 rounded-md border bg-background px-4 text-sm font-medium hover:bg-muted"
+          >
+            전체 후보 더 보기
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
+
+      <PaperPortfolioCard data={data.paper_portfolio} />
+
+      <MarketHistoryPanel history={history} />
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-3xl border bg-card p-5 lg:col-span-2">
+          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
+            <Briefcase className="h-4 w-4" />
+            내 포트폴리오에는?
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(data.portfolio.allocation_guidance ?? []).map((item: any) => (
+              <AllocationTile key={item.label} item={item} />
+            ))}
+          </div>
+          <div className="mt-4 space-y-2">
+            {(data.portfolio.notes ?? []).slice(0, 2).map((note: string) => (
+              <p key={note} className="rounded-2xl border bg-background p-3 text-sm leading-6 text-muted-foreground">
+                {note}
+              </p>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border bg-card p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            조심할 점
+          </h2>
+          <p className="rounded-2xl border border-warning/25 bg-warning/10 p-4 text-sm leading-6 text-warning">
+            {risk ?? "큰 리스크 신호는 아직 없지만, 신규 진입은 항상 분할로 접근하는 편이 안전합니다."}
+          </p>
+          <div className="mt-4 rounded-2xl border bg-background p-4">
+            <div className="text-xs text-muted-foreground">데이터 상태</div>
+            <div className="mt-1 text-lg font-semibold">
+              facts {data.health.facts} · signals {data.health.signals}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PaperPortfolioCard({ data, expert = false }: { data: any; expert?: boolean }) {
+  if (!data) return null;
+  const positive = Number(data.return_pct ?? 0) >= 0;
+  const excess =
+    data.benchmark_return_pct == null ? null : Number(data.return_pct ?? 0) - Number(data.benchmark_return_pct);
+
+  return (
+    <section className="rounded-3xl border bg-card p-5">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="mb-2 inline-flex rounded-full border bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+            실증 포트폴리오
+          </div>
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <Briefcase className="h-4 w-4" />
+            {data.label}
+          </h2>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">실거래가 아닌 가상 운용입니다. 하루 4회 신호와 결과를 점검합니다.</p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-muted-foreground">현재 평가금액</div>
+          <div className="text-xl font-semibold tabular-nums">
+            {Math.round(Number(data.current_value ?? 0)).toLocaleString("ko-KR")}원
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <PaperMetric label="시작금액" value={`${Math.round(Number(data.initial_value ?? 0)).toLocaleString("ko-KR")}원`} />
+        <PaperMetric
+          label="누적수익률"
+          value={`${positive ? "+" : ""}${Number(data.return_pct ?? 0).toFixed(2)}%`}
+          tone={positive ? "pos" : "neg"}
+        />
+        <PaperMetric label="현금비중" value={`${Math.round(Number(data.cash_weight ?? 0) * 100)}%`} />
+        <PaperMetric
+          label={expert ? `초과수익 vs ${data.benchmark_label}` : "시장 대비"}
+          value={excess == null ? "대기" : `${excess >= 0 ? "+" : ""}${excess.toFixed(2)}%p`}
+          tone={excess == null ? undefined : excess >= 0 ? "pos" : "neg"}
+        />
+        <PaperMetric label={expert ? "MDD" : "최대 낙폭"} value={`${Number(data.max_drawdown_pct ?? 0).toFixed(1)}%`} tone="neg" />
+      </div>
+    </section>
+  );
+}
+
+function PaperMetric({ label, value, tone }: { label: string; value: string; tone?: "pos" | "neg" }) {
+  return (
+    <div className="rounded-2xl border bg-background p-4">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div
+        className="mt-1 text-base font-semibold tabular-nums"
+        style={{ color: tone === "pos" ? "var(--success)" : tone === "neg" ? "var(--danger)" : "var(--foreground)" }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function MarketHistoryPanel({ history, expert = false }: { history: any[]; expert?: boolean }) {
+  return (
+    <section className="rounded-3xl border bg-card p-5">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <Clock3 className="h-4 w-4 text-primary" />
+            판단 히스토리
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            하루 네 번의 판단 변화를 기록합니다.
+          </p>
+        </div>
+        <span className="rounded-md border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
+          최근 {history.length}회
+        </span>
+      </div>
+
+      {history.length === 0 ? (
+        <div className="rounded-2xl border bg-background p-5 text-sm text-muted-foreground">
+          아직 기록이 없습니다. 다음 갱신 후 표시됩니다.
+        </div>
+      ) : (
+        <div className={expert ? "grid gap-3 lg:grid-cols-2" : "space-y-3"}>
+          {history.slice(0, expert ? 6 : 4).map((item) => (
+            <HistoryItem key={item.id ?? item.generated_at} item={item} expert={expert} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HistoryItem({ item, expert }: { item: any; expert: boolean }) {
+  const opportunities = Array.isArray(item.top_opportunities) ? item.top_opportunities : [];
+  const actions = Array.isArray(item.top_actions) ? item.top_actions : [];
+  const themes = Array.isArray(item.active_themes) ? item.active_themes : [];
+
+  return (
+    <article className="rounded-2xl border bg-background p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">
+          {item.session_label}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {new Date(item.generated_at).toLocaleString("ko-KR")}
+        </span>
+        {expert && (
+          <span className="rounded-md border px-2 py-1 text-[11px] text-muted-foreground">
+            {item.regime} · {item.trend} · {signed(Number(item.score ?? 0))}
+          </span>
+        )}
+      </div>
+      <h3 className="text-sm font-semibold leading-6">{item.headline}</h3>
+      {!expert && actions[0] && <p className="mt-2 text-sm leading-6 text-muted-foreground">{actions[0]}</p>}
+      {expert && (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border bg-card p-3">
+            <div className="text-[11px] text-muted-foreground">확신도</div>
+            <div className="mt-1 font-semibold">{pct(Number(item.confidence ?? 0))}</div>
+          </div>
+          <div className="rounded-xl border bg-card p-3">
+            <div className="text-[11px] text-muted-foreground">상위 후보</div>
+            <div className="mt-1 font-semibold">
+              {opportunities.slice(0, 2).map((o: any) => o.symbol).join(", ") || "없음"}
+            </div>
+          </div>
+        </div>
+      )}
+      {expert && themes.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {themes.slice(0, 5).map((theme: string) => (
+            <span key={theme} className="rounded-md bg-secondary px-2 py-1 text-[11px] font-medium">
+              {theme.replaceAll("_", " ")}
+            </span>
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function EasyAnswer({ label, value, helper }: { label: string; value: string; helper: string }) {
+  return (
+    <div className="rounded-2xl border bg-background/80 p-4">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
+    </div>
+  );
+}
+
+function EasyOpportunityCard({ item, rank }: { item: any; rank: number }) {
+  return (
+    <article className="rounded-2xl border bg-background p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">
+          추천 {rank}
+        </span>
+        {item.owned && <span className="rounded-full bg-info/10 px-2.5 py-1 text-xs font-semibold text-info">보유중</span>}
+      </div>
+      <div className="text-2xl font-semibold tracking-tight">{item.symbol}</div>
+      <div className="mt-1 text-sm text-muted-foreground">{item.name}</div>
+      <div className="mt-4 rounded-xl bg-secondary p-3">
+        <div className="text-xs text-muted-foreground">지금 판단</div>
+        <div className="mt-1 font-semibold">{item.action_label}</div>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">
+        {(item.reasons ?? [])[0] ?? "시장 방향성이 더 명확해질 때까지 관찰하세요."}
+      </p>
+    </article>
+  );
+}
+
+function DecisionMetric({
+  icon: Icon,
+  label,
+  value,
+  helper,
+}: {
+  icon: typeof Target;
+  label: string;
+  value: string;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-xl border bg-background/80 p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <div className="text-xl font-semibold tracking-tight">{value}</div>
+      <div className="mt-1 text-[11px] text-muted-foreground">{helper}</div>
+    </div>
+  );
+}
+
+function AllocationTile({ item }: { item: any }) {
+  const tone =
+    item.tone === "positive"
+      ? "border-success/20 bg-success/10 text-success"
+      : item.tone === "caution"
+        ? "border-warning/20 bg-warning/10 text-warning"
+        : item.tone === "defensive"
+          ? "border-info/20 bg-info/10 text-info"
+          : "border-border bg-background text-foreground";
+
+  return (
+    <div className={`rounded-xl border p-3 ${tone}`}>
+      <div className="text-xs opacity-80">{item.label}</div>
+      <div className="mt-1 text-base font-semibold">{item.value}</div>
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
@@ -264,10 +698,17 @@ function OpportunityCard({ item }: { item: any }) {
   const positive = item.action === "ACCUMULATE" || item.action === "ADD" || item.action === "HOLD";
 
   return (
-    <article className="rounded-lg border bg-card p-4">
+    <article className="group rounded-2xl border bg-card p-4 transition hover:-translate-y-0.5 hover:shadow-lg">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <div className="text-lg font-semibold tracking-tight">{item.symbol}</div>
+          <div className="flex items-center gap-2">
+            <div className="text-lg font-semibold tracking-tight">{item.symbol}</div>
+            {positive ? (
+              <CheckCircle2 className="h-4 w-4 text-success" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-danger" />
+            )}
+          </div>
           <div className="mt-0.5 text-xs text-muted-foreground">{item.name}</div>
         </div>
         <span className="rounded-md border bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
@@ -297,8 +738,8 @@ function OpportunityCard({ item }: { item: any }) {
           <div className="mt-0.5 font-semibold">{pct(Number(item.confidence ?? 0))}</div>
         </div>
         <div className="rounded-md bg-muted/50 p-2">
-          <div className="text-muted-foreground">기간</div>
-          <div className="mt-0.5 font-semibold">{item.horizon}</div>
+          <div className="text-muted-foreground">우선 점수</div>
+          <div className="mt-0.5 font-semibold">{signed(Number(item.score ?? 0))}</div>
         </div>
       </div>
 

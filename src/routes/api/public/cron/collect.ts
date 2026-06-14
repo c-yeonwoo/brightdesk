@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { finalizeCronRun, registerCronRun, requireCronRequest } from "@/lib/cron.server";
 
-// Public cron endpoint — called hourly by pg_cron.
+// Public cron endpoint — manual/lightweight collection path.
 // and the only side effect is running the same logic the admin UI button runs.
 export const Route = createFileRoute("/api/public/cron/collect")({
   server: {

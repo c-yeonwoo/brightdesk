@@ -56,6 +56,14 @@ function Bar({ label, value, max = 3, tone }: { label: string; value: number; ma
   );
 }
 
+function evidenceLabel(n?: number) {
+  const count = n ?? 0;
+  if (count >= 30) return { label: "검증 충분", cls: "bg-success/10 text-success" };
+  if (count >= 10) return { label: "검증 보통", cls: "bg-warning/10 text-warning" };
+  if (count > 0) return { label: "표본 적음", cls: "bg-warning/10 text-warning" };
+  return { label: "검증 대기", cls: "bg-muted text-muted-foreground" };
+}
+
 export function SignalCard(p: Props) {
   const { plain } = usePlainMode();
   const style = KIND_STYLE[p.kind] ?? KIND_STYLE.HOLD;
@@ -73,6 +81,7 @@ export function SignalCard(p: Props) {
     winrateN: p.winrateN,
   });
   const rsiPlain = plainRsi(p.rsi14);
+  const evidence = evidenceLabel(p.winrateN);
 
   return (
     <div className="rounded-xl border bg-card p-4">
@@ -84,7 +93,7 @@ export function SignalCard(p: Props) {
               style={{ background: lightColor, boxShadow: `0 0 0 3px color-mix(in oklab, ${lightColor} 18%, transparent)` }}
               aria-label={`신호등 ${light}`}
             />
-            <span className="text-base font-semibold tabular-nums">{p.ticker}</span>
+            <span className="text-sm font-semibold tabular-nums">{p.ticker}</span>
             <span
               className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
               style={{ background: style.bg, color: style.color }}
@@ -104,13 +113,16 @@ export function SignalCard(p: Props) {
             </p>
           )}
 
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
             {plain ? (
               <>
                 {confPct != null && <span>{plainConfidence(p.confidence)}</span>}
                 {winratePct != null && p.winrateN! > 0 && (
                   <span>이런 신호의 과거 적중률 {winratePct}%</span>
                 )}
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${evidence.cls}`}>
+                  {evidence.label}
+                </span>
               </>
             ) : (
               <>
@@ -127,7 +139,9 @@ export function SignalCard(p: Props) {
                     <TermTooltip term="승률" /> {winratePct}% (n={p.winrateN})
                   </span>
                 )}
-                {p.winrateN === 0 && <span className="opacity-60">승률 데이터 부족</span>}
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${evidence.cls}`}>
+                  {evidence.label}
+                </span>
               </>
             )}
           </div>
@@ -157,6 +171,20 @@ export function SignalCard(p: Props) {
         </div>
       )}
 
+      <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+        {p.winrate != null && (p.winrateN ?? 0) > 0 ? (
+          <>
+            이 적중률은 과거 같은 방향의 신호가 <strong className="text-foreground">다음 거래일 시가 진입 후 5거래일 뒤</strong>{" "}
+            기준을 만족한 비율입니다. 표본 <strong className="text-foreground">n={p.winrateN}</strong>
+            {p.winrateN < 10 ? "이라 아직 참고용으로만 보세요." : " 기준으로 계산했습니다."}
+          </>
+        ) : (
+          <>
+            5거래일 검증 대기 중입니다.
+          </>
+        )}
+      </div>
+
       {p.targetWeight != null && p.confidence != null && (p.kind === "BUY" || p.kind === "ADD") && (
         <div
           className="mt-3 rounded-lg border-l-2 px-2.5 py-2 text-[11px]"
@@ -172,7 +200,7 @@ export function SignalCard(p: Props) {
           {plain ? (
             <div className="leading-relaxed text-foreground/80">
               기본 {((p.baseAlloc ?? 0.15) * 100).toFixed(0)}%에서 시작 →
-              AI 확신({(p.confidence * 100).toFixed(0)}%)
+              모델 확신({(p.confidence * 100).toFixed(0)}%)
               {p.winrate != null && (p.winrateN ?? 0) > 0 && <> · 과거 적중률({Math.round(p.winrate * 100)}%)</>}
               {p.kbReliability != null && <> · 뉴스 신뢰도({p.kbReliability.toFixed(2)})</>}
               을 곱해서 →

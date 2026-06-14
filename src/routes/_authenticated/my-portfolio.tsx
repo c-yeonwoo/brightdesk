@@ -27,8 +27,8 @@ import {
 export const Route = createFileRoute("/_authenticated/my-portfolio")({
   head: () => ({
     meta: [
-      { title: "내 포트폴리오 · BrightDesk" },
-      { name: "description", content: "내 보유 종목을 입력하면 AI가 KB·기술·기본 분석을 종합해 매수/매도/비중을 재구성 추천합니다." },
+      { title: "포트폴리오 · BrightDesk" },
+      { name: "description", content: "보유 포트폴리오와 레퍼런스 포트폴리오를 비교합니다." },
     ],
   }),
   component: MyPortfolioPage,
@@ -52,20 +52,106 @@ const QUICK_TICKERS = [
   { ticker: "000660.KS", label: "SK하이닉스" },
   { ticker: "035420.KS", label: "NAVER" },
 ];
+const USE_LOCAL_MOCK = import.meta.env.DEV && import.meta.env.VITE_BRIGHTDESK_MOCK_DASHBOARD !== "false";
+const MOCK_HOLDINGS = {
+  portfolio_id: "mock-portfolio",
+  holdings: [
+    { ticker: "SPY", qty: 12, avg_price: 510 },
+    { ticker: "QQQ", qty: 5, avg_price: 430 },
+    { ticker: "MSFT", qty: 4, avg_price: 390 },
+    { ticker: "005930.KS", qty: 20, avg_price: 72000 },
+  ],
+};
+const MOCK_RECOMMENDATION = {
+  total_value: 18_420_000,
+  expected_return: 8.4,
+  rationale:
+    "반도체 모멘텀은 유지하되 이미 성장주 노출이 있어 SMH는 분할 접근, 장기채는 FOMC 이후 확인 진입이 적합합니다.",
+  actions: [
+    {
+      ticker: "SMH",
+      action: "ADD",
+      total_score: 2.4,
+      technical_score: 0.8,
+      fundamental_score: 0.6,
+      kb_score: 1.0,
+      confidence: 0.76,
+      winrate: 0.62,
+      winrate_n: 24,
+      current_weight: 0,
+      target_weight: 0.12,
+      reasons: ["HBM과 데이터센터 수요가 KB 근거에서 반복 확인", "반도체 ETF가 개별주보다 변동성 관리에 유리"],
+      fact_ids: [],
+    },
+    {
+      ticker: "QQQ",
+      action: "HOLD",
+      total_score: 1.5,
+      technical_score: 0.5,
+      fundamental_score: 0.4,
+      kb_score: 0.6,
+      confidence: 0.68,
+      winrate: 0.58,
+      winrate_n: 31,
+      current_weight: 0.24,
+      target_weight: 0.22,
+      reasons: ["성장주 추세는 유지", "이미 보유 노출이 있어 추가 매수보다 유지가 적합"],
+      fact_ids: [],
+    },
+    {
+      ticker: "TLT",
+      action: "WATCH",
+      total_score: 0.7,
+      technical_score: 0.1,
+      fundamental_score: 0.2,
+      kb_score: 0.4,
+      confidence: 0.56,
+      winrate: 0.51,
+      winrate_n: 18,
+      current_weight: 0,
+      target_weight: 0.08,
+      reasons: ["금리 인하 기대는 우호적이나 CPI/FOMC 확인 필요"],
+      fact_ids: [],
+    },
+  ],
+};
+const MOCK_HISTORY = [
+  {
+    id: "mock-rec-1",
+    generated_at: new Date().toISOString(),
+    actions: MOCK_RECOMMENDATION.actions,
+    rationale: MOCK_RECOMMENDATION.rationale,
+  },
+  {
+    id: "mock-rec-2",
+    generated_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    actions: MOCK_RECOMMENDATION.actions.slice(0, 2),
+    rationale: "전일 기준으로는 QQQ 유지, MSFT 보유, 방어자산 관찰이 우선이었습니다.",
+  },
+];
 
 function MyPortfolioPage() {
   const qc = useQueryClient();
   const { data: saved } = useQuery({
     queryKey: ["user-holdings"],
-    queryFn: () => getUserHoldings(),
+    queryFn: async () => {
+      if (USE_LOCAL_MOCK) return MOCK_HOLDINGS;
+      return getUserHoldings();
+    },
   });
   const { data: history } = useQuery({
     queryKey: ["rec-history"],
-    queryFn: () => listRecommendations({ data: { limit: 5 } }),
+    queryFn: async () => {
+      if (USE_LOCAL_MOCK) return MOCK_HISTORY;
+      return listRecommendations({ data: { limit: 5 } });
+    },
   });
   const { data: tickerSuggestions = [] } = useQuery({
     queryKey: ["ticker-suggestions"],
-    queryFn: () => listTickerSuggestions(),
+    queryFn: async () => {
+      if (USE_LOCAL_MOCK) return QUICK_TICKERS.map((item, index) => ({ ticker: item.ticker, count: 12 - index }));
+      return listTickerSuggestions();
+    },
   });
 
   const [rows, setRows] = useState<Row[]>([EMPTY]);
@@ -108,15 +194,17 @@ function MyPortfolioPage() {
     }));
 
   const saveMut = useMutation({
-    mutationFn: () => saveUserHoldings({ data: { holdings } }),
+    mutationFn: async () => (USE_LOCAL_MOCK ? { ok: true, portfolio_id: "mock-portfolio", count: holdings.length } : saveUserHoldings({ data: { holdings } })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["user-holdings"] }),
   });
 
   const recMut = useMutation({
-    mutationFn: () =>
-      generateRebalanceRecommendation({
-        data: { holdings, save: true },
-      }),
+    mutationFn: async () =>
+      USE_LOCAL_MOCK
+        ? MOCK_RECOMMENDATION
+        : generateRebalanceRecommendation({
+            data: { holdings, save: true },
+          }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["rec-history"] }),
   });
 
@@ -125,10 +213,12 @@ function MyPortfolioPage() {
   return (
     <AppShell>
       <div className="mb-6">
-        <h1 className="text-xl font-semibold tracking-tight">내 포트폴리오</h1>
+        <div className="mb-2 inline-flex rounded-full border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+          {USE_LOCAL_MOCK ? "샘플 포트폴리오" : "포트폴리오"}
+        </div>
+        <h1 className="text-xl font-semibold tracking-tight">포트폴리오</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          내 보유 종목을 입력하면 AI가 <strong>KB 인사이트 · 기술적 · 기본적 분석</strong>을 종합해
-          매수/매도/비중을 재구성 추천합니다. (실거래 X)
+          보유 종목을 입력하면 리밸런싱 방향을 제안합니다. 향후 레퍼런스 포트폴리오도 함께 비교합니다.
         </p>
       </div>
 
@@ -212,7 +302,7 @@ function MyPortfolioPage() {
               className="w-full"
             >
               {recMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              AI 재구성 추천 받기
+              리밸런싱 제안 보기
             </Button>
             <Button
               variant="outline"
@@ -237,11 +327,10 @@ function MyPortfolioPage() {
               <Sparkles className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
               <h3 className="text-sm font-medium">아직 추천이 없습니다</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                왼쪽에 보유 종목을 입력하고 <strong>AI 재구성 추천 받기</strong>를 눌러주세요.
+                왼쪽에 보유 종목을 입력하고 <strong>리밸런싱 제안 보기</strong>를 눌러주세요.
               </p>
               <p className="mt-3 text-[11px] text-muted-foreground">
-                각 액션은 <strong>기술적 · 기본적 · KB 종합 점수</strong>와
-                <strong> 과거 시그널 승률</strong>을 근거로 산정됩니다.
+                액션은 점수, 신뢰도, 과거 적중률을 함께 봅니다.
               </p>
             </div>
           )}
@@ -249,7 +338,7 @@ function MyPortfolioPage() {
           {recMut.isPending && (
             <div className="rounded-xl border bg-card p-8 text-center">
               <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm">KB · 기술 · 기본 분석을 종합하는 중…</p>
+              <p className="text-sm">분석 중…</p>
             </div>
           )}
 

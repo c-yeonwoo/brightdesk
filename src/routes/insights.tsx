@@ -43,6 +43,110 @@ const TABS = [
   { id: "backtest", label: "백테스트", icon: BarChart3 },
   { id: "facts", label: "KB Facts", icon: Database },
 ] as const;
+const USE_LOCAL_MOCK = import.meta.env.DEV && import.meta.env.VITE_BRIGHTDESK_MOCK_DASHBOARD !== "false";
+const MOCK_SIGNALS = [
+  {
+    id: "mock-signal-smh",
+    ticker: "SMH",
+    kind: "BUY",
+    score: 2.6,
+    technical_score: 0.8,
+    fundamental_score: 0.7,
+    kb_score: 1.1,
+    confidence: 0.78,
+    reasons: ["데이터센터 투자와 HBM 수요가 강하게 연결", "반도체 ETF가 개별 종목보다 분산 효과 제공"],
+    rsi14: 58,
+    macd_hist: 0.42,
+    fact_ids: [],
+  },
+  {
+    id: "mock-signal-qqq",
+    ticker: "QQQ",
+    kind: "HOLD",
+    score: 1.4,
+    technical_score: 0.5,
+    fundamental_score: 0.4,
+    kb_score: 0.5,
+    confidence: 0.66,
+    reasons: ["성장주 주도력은 유지", "밸류에이션 부담으로 신규 비중 확대는 신중"],
+    rsi14: 63,
+    macd_hist: 0.18,
+    fact_ids: [],
+  },
+  {
+    id: "mock-signal-tlt",
+    ticker: "TLT",
+    kind: "HOLD",
+    score: 0.7,
+    technical_score: 0.1,
+    fundamental_score: 0.2,
+    kb_score: 0.4,
+    confidence: 0.55,
+    reasons: ["금리 인하 기대는 있으나 CPI/FOMC 확인 필요"],
+    rsi14: 47,
+    macd_hist: -0.06,
+    fact_ids: [],
+  },
+];
+const MOCK_FACTS = [
+  {
+    id: "mock-fact-ai",
+    title: "데이터센터 투자가 반도체 체인 실적 기대를 지지",
+    summary: "데이터센터 capex, HBM, GPU 공급망 수요가 SMH, SOXX, NVDA, AVGO에 우호적으로 작용합니다.",
+    updated_at: new Date().toISOString(),
+    reliability: 0.82,
+    sentiment: 0.42,
+    related_tickers: ["SMH", "SOXX", "NVDA", "AVGO"],
+  },
+  {
+    id: "mock-fact-fomc",
+    title: "FOMC 이후 금리 인하 기대는 유지되지만 속도는 완만",
+    summary: "장기채와 성장주는 물가 지표 확인이 필요하며, TLT는 관찰 후보로 분류됩니다.",
+    updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    reliability: 0.76,
+    sentiment: 0.16,
+    related_tickers: ["TLT", "IEF", "QQQ"],
+  },
+  {
+    id: "mock-fact-risk",
+    title: "중동 리스크와 유가 변수는 에너지와 금에 단기 모멘텀 제공",
+    summary: "XLE, GLD는 헤지 후보지만 전체 위험자산에는 변동성 요인입니다.",
+    updated_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+    reliability: 0.71,
+    sentiment: -0.04,
+    related_tickers: ["XLE", "GLD"],
+  },
+];
+const MOCK_SCENARIOS = [
+  {
+    id: "mock-scenario-1",
+    name: "Balanced Momentum",
+    params: { rsiBuy: 45, rsiSell: 72, allocPctPerTrade: 0.12, stopLossPct: 0.08, takeProfitPct: 0.18 },
+    total_return: 0.142,
+    sharpe: 1.36,
+    mdd: 0.083,
+    score: 1.84,
+  },
+  {
+    id: "mock-scenario-2",
+    name: "Theme Rotation",
+    params: { rsiBuy: 50, rsiSell: 75, allocPctPerTrade: 0.16, stopLossPct: 0.1, takeProfitPct: 0.22 },
+    total_return: 0.118,
+    sharpe: 1.12,
+    mdd: 0.116,
+    score: 1.42,
+  },
+];
+const MOCK_CURVE = Array.from({ length: 18 }).map((_, index) => {
+  const equity = 10_000_000 * (1 + index * 0.008 + Math.sin(index / 2) * 0.012);
+  const benchmark = 10_000_000 * (1 + index * 0.004 + Math.sin(index / 3) * 0.009);
+  return {
+    date: new Date(Date.now() - (17 - index) * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    equity,
+    benchmark,
+  };
+});
+const MOCK_CURVE_DATA = { best: MOCK_SCENARIOS[0], curve: MOCK_CURVE };
 
 function InsightsPage() {
   const [tab, setTab] = useState<typeof TABS[number]["id"]>("signals");
@@ -52,7 +156,7 @@ function InsightsPage() {
       <div className="mb-5">
         <h1 className="text-xl font-semibold tracking-tight">인사이트</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          모든 분석 결과는 <strong>기술 · 기본 · KB</strong> 3-팩터 점수 + 과거 승률을 근거로 산출됩니다.
+          시그널, 백테스트, KB 근거를 한곳에서 확인합니다.
         </p>
       </div>
 
@@ -88,7 +192,7 @@ function InsightsPage() {
 function SignalsTab() {
   const { data, isLoading } = useQuery({
     queryKey: ["latest-signals-by-ticker"],
-    queryFn: () => getLatestSignalPerTicker(),
+    queryFn: async () => (USE_LOCAL_MOCK ? MOCK_SIGNALS : getLatestSignalPerTicker()),
   });
   if (isLoading) return <div className="text-sm text-muted-foreground">불러오는 중…</div>;
   const rows = (data ?? []) as any[];
@@ -124,7 +228,7 @@ function SignalsTab() {
 function FactsTab() {
   const { data, isLoading } = useQuery({
     queryKey: ["facts-insights"],
-    queryFn: () => listFacts({ data: { limit: 50 } }),
+    queryFn: async () => (USE_LOCAL_MOCK ? MOCK_FACTS : listFacts({ data: { limit: 50 } })),
   });
   if (isLoading) return <div className="text-sm text-muted-foreground">불러오는 중…</div>;
   const rows = (data ?? []) as any[];
@@ -160,15 +264,20 @@ function BacktestTab() {
   const [lastHandledRunId, setLastHandledRunId] = useState<string | null>(null);
   const { data: scenarios, isLoading } = useQuery({
     queryKey: ["scenarios"],
-    queryFn: () => getScenarios(),
+    queryFn: async () => (USE_LOCAL_MOCK ? MOCK_SCENARIOS : getScenarios()),
   });
   const { data: curveData, isLoading: curveLoading } = useQuery({
     queryKey: ["best-scenario-curve"],
-    queryFn: () => getBestScenarioCurve(),
+    queryFn: async () => (USE_LOCAL_MOCK ? MOCK_CURVE_DATA : getBestScenarioCurve()),
   });
   const { data: scenarioRun } = useQuery({
     queryKey: ["scenario-run", runId],
-    queryFn: () => (runId ? getScenarioRunInfo({ data: { runId } }) : getLatestScenarioRunInfo()),
+    queryFn: () =>
+      USE_LOCAL_MOCK
+        ? { run_id: runId ?? "mock-run", status: "success", completed_scenarios: 10, total_scenarios: 10 }
+        : runId
+          ? getScenarioRunInfo({ data: { runId } })
+          : getLatestScenarioRunInfo(),
     enabled: Boolean(runId),
     refetchInterval: (query) => {
       const latest = query.state.data as any;
@@ -176,7 +285,7 @@ function BacktestTab() {
     },
   });
   const run = useMutation({
-    mutationFn: () => runScenarios(),
+    mutationFn: async () => (USE_LOCAL_MOCK ? { runId: "mock-run" } : runScenarios()),
     onSuccess: (result) => {
       setRunId(result.runId);
       setLastHandledRunId(null);
@@ -230,7 +339,7 @@ function BacktestTab() {
     <div className="space-y-4">
       <div className="flex items-end justify-between">
         <p className="text-xs text-muted-foreground">
-          과거 6개월 가격으로 10개 파라미터 조합을 시뮬레이션 → 최적 시나리오의 자산곡선과 벤치마크 비교.
+          과거 가격으로 전략 성과와 벤치마크를 비교합니다.
         </p>
         <button
           onClick={() => run.mutate()}
@@ -450,8 +559,7 @@ function BacktestTab() {
       </div>
 
       <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
-        ⚠️ 과거 성과는 미래를 보장하지 않습니다. 백테스트는 수수료(0.18%) · 세금(0.015%) 가정,
-        체결가는 다음 거래일 시가 · 진입조건은 RSI + MA 추세필터.
+        과거 성과는 미래를 보장하지 않습니다. 수수료·세금·다음 거래일 시가 체결을 가정합니다.
       </div>
     </div>
   );

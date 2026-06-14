@@ -89,8 +89,8 @@ export function plainConclusion(args: {
 
 export function plainConfidence(c?: number | null): string {
   if (c == null) return "—";
-  if (c >= 0.8) return "AI가 매우 확신 ⭐⭐⭐⭐⭐";
-  if (c >= 0.65) return "꽤 확신 ⭐⭐⭐⭐";
+  if (c >= 0.8) return "매우 높음 ⭐⭐⭐⭐⭐";
+  if (c >= 0.65) return "높음 ⭐⭐⭐⭐";
   if (c >= 0.5) return "보통 ⭐⭐⭐";
   if (c >= 0.35) return "약함 ⭐⭐";
   return "매우 약함 ⭐";

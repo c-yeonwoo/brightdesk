@@ -81,7 +81,7 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
   if (trades.length === 0) {
     return (
       <div className="rounded-xl border bg-card p-8 text-center text-xs text-muted-foreground">
-        아직 체결된 거래가 없습니다. 1시간 cron이 신뢰도 임계치를 넘는 시그널을 만나면 자동 체결됩니다.
+        아직 체결된 거래가 없습니다. 하루 4회 market-session cron이 신뢰도 임계치를 넘는 시그널을 만나면 자동 체결됩니다.
       </div>
     );
   }

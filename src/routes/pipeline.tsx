@@ -145,7 +145,7 @@ function PipelinePage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">파이프라인</h1>
           <p className="text-sm text-muted-foreground">
-            수집 → 정제 단계를 수동 실행하거나, 매 시간 자동 실행되는 cron 상태를 확인하세요.
+            수집 → 정제 단계를 수동 실행하거나, 장 흐름에 맞춰 하루 4회 실행되는 cron 상태를 확인하세요.
           </p>
         </div>
         <button
@@ -380,9 +380,9 @@ function PipelinePage() {
       <div className={`mt-6 rounded-xl border bg-card p-5 ${mode === "user" ? "hidden" : "block"}`}>
         <h2 className="mb-2 text-sm font-semibold">자동 실행 (cron)</h2>
         <p className="text-xs text-muted-foreground">
-          매 시간 정각 <code className="rounded bg-muted px-1">POST /api/public/cron/collect</code> (헤더: <code className="rounded bg-muted px-1">X-BRIGHTDESK-CRON-TOKEN</code>)
-          호출 → 수집 + 최대 20건 정제. pg_cron 잡 이름: {" "}
-          <code className="rounded bg-muted px-1">kb-hourly-collect</code>.
+          KST 08:45, 10:00, 15:00, 17:00에 <code className="rounded bg-muted px-1">POST /api/public/cron/hourly-rebalance</code> (헤더: <code className="rounded bg-muted px-1">X-BRIGHTDESK-CRON-TOKEN</code>)
+          호출 → 수집 + 정제 + 시그널 + 레짐 + 스냅샷 갱신. pg_cron 잡 이름: {" "}
+          <code className="rounded bg-muted px-1">brightdesk-market-*</code>.
         </p>
       </div>
     </AppShell>

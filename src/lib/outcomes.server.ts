@@ -16,7 +16,7 @@ export async function evaluateSignalOutcomes(maxBatch = 200) {
     .order("ts", { ascending: false })
     .limit(maxBatch);
 
-  if (!sigs || sigs.length === 0) return { evaluated: 0 };
+  if (!sigs || sigs.length === 0) return { evaluated: 0, pending: 0, not_matured_5d: 0, missing_prices: 0 };
 
   const ids = sigs.map((s: any) => s.id);
   const { data: existing } = await sb
@@ -26,8 +26,12 @@ export async function evaluateSignalOutcomes(maxBatch = 200) {
   const done = new Set((existing ?? []).map((r: any) => r.signal_id));
 
   let count = 0;
+  let pending = 0;
+  let notMatured5d = 0;
+  let missingPrices = 0;
   for (const s of sigs as any[]) {
     if (done.has(s.id)) continue;
+    pending++;
     const tsDate = s.ts.slice(0, 10);
     // 진입가: 시그널 다음 거래일 open
     const { data: entryRows } = await sb
@@ -37,13 +41,23 @@ export async function evaluateSignalOutcomes(maxBatch = 200) {
       .gt("date", tsDate)
       .order("date", { ascending: true })
       .limit(25);
-    if (!entryRows || entryRows.length === 0) continue;
+    if (!entryRows || entryRows.length === 0) {
+      missingPrices++;
+      continue;
+    }
     const entry: any = entryRows[0];
     const entryPrice = Number(entry.open);
-    if (!entryPrice) continue;
+    if (!entryPrice) {
+      missingPrices++;
+      continue;
+    }
 
     const r5: any = entryRows[5];
     const r20: any = entryRows[20];
+    if (!r5) {
+      notMatured5d++;
+      continue;
+    }
     const ret5 = r5 ? (Number(r5.close) - entryPrice) / entryPrice : null;
     const ret20 = r20 ? (Number(r20.close) - entryPrice) / entryPrice : null;
 
@@ -66,7 +80,12 @@ export async function evaluateSignalOutcomes(maxBatch = 200) {
     });
     count++;
   }
-  return { evaluated: count };
+  return {
+    evaluated: count,
+    pending,
+    not_matured_5d: notMatured5d,
+    missing_prices: missingPrices,
+  };
 }
 
 export interface WinrateStats {

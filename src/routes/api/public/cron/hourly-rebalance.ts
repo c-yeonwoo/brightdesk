@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { finalizeCronRun, registerCronRun, requireCronRequest } from "@/lib/cron.server";
 
-// 1시간마다 자동 실행: 수집 → 시그널 생성 → 레짐 점검 → SL/TP 청산 → Track A 자동 운용 → 스냅샷.
+// Market session refresh: 수집 → 시그널 생성 → 레짐 점검 → SL/TP 청산 → Track A 자동 운용 → 스냅샷.
+// 운영 스케줄은 KST 장 흐름에 맞춰 08:45, 10:00, 15:00, 17:00 하루 4회 실행한다.
 type RetryResult<T> = {
   value: T | null;
   attempts: number;
@@ -209,6 +210,16 @@ export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
           } catch (e: any) {
             failed = true;
             log.outcomes_error = e?.message ?? String(e);
+          }
+        }
+
+        if (!failed) {
+          try {
+            const { recordMarketDeskSnapshot } = await import("@/lib/market.functions");
+            log.dashboard_snapshot = await recordMarketDeskSnapshot(runKey);
+          } catch (e: any) {
+            failed = true;
+            log.dashboard_snapshot_error = e?.message ?? String(e);
           }
         }
 

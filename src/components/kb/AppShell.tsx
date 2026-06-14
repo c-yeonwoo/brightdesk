@@ -10,7 +10,7 @@ import { getFxRate } from "@/lib/fx.functions";
 
 const nav = [
   { to: "/", label: "대시보드", icon: Activity },
-  { to: "/my-portfolio", label: "내 포트폴리오", icon: Briefcase },
+  { to: "/my-portfolio", label: "포트폴리오", icon: Briefcase },
   { to: "/insights", label: "인사이트", icon: Sparkles },
   { to: "/data", label: "데이터", icon: Database },
 ];
@@ -32,7 +32,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex min-w-0 flex-col leading-tight">
               <span className="text-sm font-semibold tracking-tight">BrightDesk</span>
               <span className="hidden truncate text-[10px] text-muted-foreground sm:inline">
-                Live AI Trading Desk · 1,000만원 실증
+                Market desk · 1,000만원 실증
               </span>
             </div>
           </Link>
@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
               </span>
-              <span>Live · 1h 자동</span>
+              <span>하루 4회 갱신</span>
             </span>
             <PlainModeToggle />
             <AlertCenter />
