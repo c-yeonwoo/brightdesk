@@ -33,7 +33,13 @@ export async function requireClientAdmin() {
 
   const user = await requireClientUser();
   const email = user.email?.toLowerCase() ?? "";
-  if (!email || !getAdminEmails().has(email)) {
+  const { data } = await supabase
+    .from("user_profiles" as any)
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const role = typeof (data as any)?.role === "string" ? (data as any).role : "user";
+  if (role !== "admin" && (!email || !getAdminEmails().has(email))) {
     throw redirect({ to: "/" });
   }
   return user;
@@ -42,6 +48,14 @@ export async function requireClientAdmin() {
 export async function isCurrentUserAdmin() {
   if (isLocalMockEnabled()) return true;
   const { data } = await supabase.auth.getUser();
+  const userId = data.user?.id;
   const email = data.user?.email?.toLowerCase() ?? "";
-  return Boolean(email && getAdminEmails().has(email));
+  if (!userId) return false;
+  const profile = await supabase
+    .from("user_profiles" as any)
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+  const role = typeof (profile.data as any)?.role === "string" ? (profile.data as any).role : "user";
+  return role === "admin" || Boolean(email && getAdminEmails().has(email));
 }

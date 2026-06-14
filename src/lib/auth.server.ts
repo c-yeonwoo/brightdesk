@@ -63,15 +63,53 @@ export async function requireAuthenticatedClaims() {
   return data.claims;
 }
 
+async function ensureUserProfile(claims: Record<string, unknown>) {
+  const userId = claims.sub;
+  if (typeof userId !== "string" || !userId) return;
+
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const email = typeof claims.email === "string" ? claims.email.toLowerCase() : null;
+  const metadata = (claims.user_metadata ?? {}) as Record<string, unknown>;
+  const displayName =
+    typeof metadata.name === "string"
+      ? metadata.name
+      : typeof metadata.full_name === "string"
+        ? metadata.full_name
+        : null;
+  const avatarUrl = typeof metadata.avatar_url === "string" ? metadata.avatar_url : null;
+
+  await (supabaseAdmin as any)
+    .from("user_profiles")
+    .upsert(
+      {
+        id: userId,
+        email,
+        display_name: displayName,
+        avatar_url: avatarUrl,
+      },
+      { onConflict: "id" },
+    );
+}
+
 export async function requireAuthenticatedUser(): Promise<string> {
   const claims = await requireAuthenticatedClaims();
+  await ensureUserProfile(claims as Record<string, unknown>);
   return claims.sub as string;
 }
 
 export async function requireAdminUser(): Promise<string> {
   const claims = await requireAuthenticatedClaims();
+  await ensureUserProfile(claims as Record<string, unknown>);
   const email = typeof claims.email === "string" ? claims.email.toLowerCase() : "";
-  if (!email || !adminEmails().has(email)) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await (supabaseAdmin as any)
+    .from("user_profiles")
+    .select("role")
+    .eq("id", claims.sub)
+    .maybeSingle();
+  const role = typeof data?.role === "string" ? data.role : "user";
+
+  if (role !== "admin" && (!email || !adminEmails().has(email))) {
     throw new Error("Forbidden: Admin access required.");
   }
   return claims.sub as string;
