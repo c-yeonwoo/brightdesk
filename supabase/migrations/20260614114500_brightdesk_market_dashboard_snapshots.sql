@@ -21,10 +21,9 @@ CREATE INDEX IF NOT EXISTS idx_market_dashboard_snapshots_generated_at
   ON public.market_dashboard_snapshots (generated_at DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_market_dashboard_snapshots_run_key
-  ON public.market_dashboard_snapshots (run_key)
-  WHERE run_key IS NOT NULL;
+  ON public.market_dashboard_snapshots (run_key);
 
-GRANT SELECT, INSERT ON public.market_dashboard_snapshots TO service_role;
+GRANT SELECT, INSERT, UPDATE ON public.market_dashboard_snapshots TO service_role;
 GRANT SELECT ON public.market_dashboard_snapshots TO anon, authenticated;
 
 ALTER TABLE public.market_dashboard_snapshots ENABLE ROW LEVEL SECURITY;
@@ -34,4 +33,9 @@ CREATE POLICY "market dashboard snapshots readable" ON public.market_dashboard_s
 
 CREATE POLICY "market dashboard snapshots service role insert" ON public.market_dashboard_snapshots
   FOR INSERT
+  WITH CHECK (auth.role() = 'service_role');
+
+CREATE POLICY "market dashboard snapshots service role update" ON public.market_dashboard_snapshots
+  FOR UPDATE
+  USING (auth.role() = 'service_role')
   WITH CHECK (auth.role() = 'service_role');

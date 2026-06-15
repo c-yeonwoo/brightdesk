@@ -14,6 +14,16 @@ const RecRequest = z.object({
   save: z.boolean().optional(),
 });
 
+const WatchlistItemSchema = z.object({
+  ticker: z.string().min(1).max(20).regex(/^[A-Za-z0-9.\-^]+$/),
+  label: z.string().trim().max(120).optional().nullable(),
+  priority: z.number().int().min(1).max(5).optional(),
+});
+
+function normalizeTicker(input: string) {
+  return input.trim().toUpperCase();
+}
+
 export const generateRebalanceRecommendation = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => RecRequest.parse(d))
   .handler(async ({ data }) => {
@@ -68,12 +78,24 @@ export const saveUserHoldings = createServerFn({ method: "POST" })
     if (data.holdings.length > 0) {
       const rows = data.holdings.map((h) => ({
         portfolio_id: pf.id,
-        ticker: h.ticker.toUpperCase(),
+        ticker: normalizeTicker(h.ticker),
         qty: h.qty,
         avg_price: h.avg_price ?? null,
       }));
       const { error } = await (supabaseAdmin.from("user_portfolio_inputs") as any).insert(rows);
       if (error) throw new Error(error.message);
+
+      const watchRows = data.holdings.map((h) => ({
+        user_id: userId,
+        ticker: normalizeTicker(h.ticker),
+        priority: 2,
+        source: "portfolio",
+        is_active: true,
+      }));
+      const { error: watchError } = await (supabaseAdmin.from("user_watchlist") as any).upsert(watchRows, {
+        onConflict: "user_id,ticker",
+      });
+      if (watchError) throw new Error(watchError.message);
     }
     return { ok: true, portfolio_id: pf.id, count: data.holdings.length };
   });
@@ -91,3 +113,51 @@ export const getUserHoldings = createServerFn({ method: "GET" }).handler(async (
   if (error) throw new Error(error.message);
   return { portfolio_id: pf.id, holdings: data ?? [] };
 });
+
+export const listWatchlist = createServerFn({ method: "GET" }).handler(async () => {
+  const userId = await requireAuthenticatedUser();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await (supabaseAdmin as any)
+    .from("user_watchlist")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .order("priority", { ascending: true })
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+});
+
+export const addWatchlistTicker = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => WatchlistItemSchema.parse(d))
+  .handler(async ({ data }) => {
+    const userId = await requireAuthenticatedUser();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const row = {
+      user_id: userId,
+      ticker: normalizeTicker(data.ticker),
+      label: data.label?.trim() || null,
+      priority: data.priority ?? 3,
+      source: "manual",
+      is_active: true,
+    };
+    const { error } = await (supabaseAdmin.from("user_watchlist") as any).upsert(row, {
+      onConflict: "user_id,ticker",
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true, ticker: row.ticker };
+  });
+
+export const removeWatchlistTicker = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ ticker: z.string().min(1).max(20) }).parse(d))
+  .handler(async ({ data }) => {
+    const userId = await requireAuthenticatedUser();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin as any)
+      .from("user_watchlist")
+      .update({ is_active: false })
+      .eq("user_id", userId)
+      .eq("ticker", normalizeTicker(data.ticker));
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });

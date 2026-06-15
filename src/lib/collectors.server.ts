@@ -234,6 +234,81 @@ function buildCollectors(
   return configs.map((cfg) => factory.build(cfg));
 }
 
+const WELL_KNOWN_TICKER_LABELS: Record<string, string> = {
+  SPY: "S&P 500 ETF",
+  QQQ: "Nasdaq 100 ETF",
+  SMH: "Semiconductor ETF",
+  SOXX: "iShares Semiconductor ETF",
+  XLK: "Technology Select Sector ETF",
+  TLT: "20+ Year Treasury Bond ETF",
+  IEF: "7-10 Year Treasury Bond ETF",
+  GLD: "Gold ETF",
+  XLE: "Energy ETF",
+  NVDA: "NVIDIA",
+  MSFT: "Microsoft",
+  AAPL: "Apple",
+  AVGO: "Broadcom",
+  TSLA: "Tesla",
+  META: "Meta Platforms",
+  GOOGL: "Alphabet",
+  AMZN: "Amazon",
+  "005930.KS": "Samsung Electronics",
+  "000660.KS": "SK Hynix",
+  "035420.KS": "NAVER",
+};
+
+function normalizeTicker(input: string) {
+  return input.trim().toUpperCase().replace(/[^A-Z0-9.^-]/g, "");
+}
+
+function tickerResearchFeedUrl(ticker: string) {
+  return `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(ticker)}&region=US&lang=en-US`;
+}
+
+function tickerResearchBodySuffix(ticker: string, label?: string | null) {
+  const display = label || WELL_KNOWN_TICKER_LABELS[ticker] || ticker;
+  return [
+    "source=ticker-research",
+    `ticker=${ticker}`,
+    `company_or_asset=${display}`,
+    `research_context=This document was collected because at least one user holds or watches ${ticker}. Extract facts that affect the ticker, its sector, or relevant macro drivers.`,
+  ].join("\n");
+}
+
+function createTickerResearchCollector(ticker: string, label?: string | null): CollectorStrategy {
+  const normalized = normalizeTicker(ticker);
+  const display = label || WELL_KNOWN_TICKER_LABELS[normalized] || normalized;
+  const feedUrl = tickerResearchFeedUrl(normalized);
+  const limit = toInt(process.env.BRIGHTDESK_TICKER_RESEARCH_RSS_LIMIT, 5);
+
+  return {
+    source: "ticker_research",
+    isEnabled: () => Boolean(normalized),
+    async fetch() {
+      const text = await fetchFeedText(feedUrl, `ticker_research:${normalized}`);
+      return parseFeedItems(text)
+        .slice(0, limit)
+        .map((item, idx) =>
+          defaultParser("ticker_research", item, feedUrl, idx, {
+            reliability: 0.72,
+            bodySuffix: tickerResearchBodySuffix(normalized, display),
+          }),
+        )
+        .map((doc, idx) => ({
+          ...doc,
+          external_id: `ticker-research-${normalized}-${doc.external_id ?? idx}`,
+          meta: {
+            ...(doc.meta ?? {}),
+            ticker: normalized,
+            tickers: [normalized],
+            research_label: display,
+            source_url: feedUrl,
+          },
+        }));
+    },
+  };
+}
+
 const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
   {
     displayName: "Federal Reserve RSS",
@@ -322,6 +397,17 @@ export function getCollectorProfiles(): SourceProfile[] {
 }
 
 function getCollectorProfile(source: string) {
+  if (source === "ticker_research") {
+    return {
+      source: "ticker_research",
+      displayName: "관심종목 뉴스 RSS",
+      kind: "rss" as const,
+      enabled: true,
+      reliability: 0.72,
+      limit: toInt(process.env.BRIGHTDESK_TICKER_RESEARCH_RSS_LIMIT, 5),
+      parserVersion: "kb-facts-v1" as const,
+    };
+  }
   return getCollectorProfiles().find((item) => item.source === source);
 }
 
@@ -336,6 +422,88 @@ export function getDefaultCollectors(): CollectorStrategy[] {
   return [...collectors];
 }
 
+async function getActiveResearchTickers(limit: number) {
+  const { data: watched } = await (supabaseAdmin as any)
+    .from("user_watchlist")
+    .select("ticker,label,priority,updated_at")
+    .eq("is_active", true)
+    .order("priority", { ascending: true })
+    .order("updated_at", { ascending: false })
+    .limit(limit * 4);
+
+  const tickers = new Map<string, { ticker: string; label: string | null; priority: number }>();
+  for (const row of watched ?? []) {
+    const ticker = normalizeTicker(row.ticker ?? "");
+    if (!ticker || tickers.has(ticker)) continue;
+    tickers.set(ticker, {
+      ticker,
+      label: row.label ?? WELL_KNOWN_TICKER_LABELS[ticker] ?? null,
+      priority: Number(row.priority ?? 3),
+    });
+    if (tickers.size >= limit) break;
+  }
+
+  if (tickers.size < limit) {
+    const { data: holdings } = await (supabaseAdmin as any)
+      .from("user_portfolio_inputs")
+      .select("ticker")
+      .limit(limit * 5);
+    for (const row of holdings ?? []) {
+      const ticker = normalizeTicker(row.ticker ?? "");
+      if (!ticker || tickers.has(ticker)) continue;
+      tickers.set(ticker, {
+        ticker,
+        label: WELL_KNOWN_TICKER_LABELS[ticker] ?? null,
+        priority: 3,
+      });
+      if (tickers.size >= limit) break;
+    }
+  }
+
+  return Array.from(tickers.values()).slice(0, limit);
+}
+
+export async function buildTickerResearchCollectors(limit = toInt(process.env.BRIGHTDESK_TICKER_RESEARCH_LIMIT, 25)) {
+  const tickers = await getActiveResearchTickers(limit);
+  return tickers.map((item) => createTickerResearchCollector(item.ticker, item.label));
+}
+
+export async function runTickerResearchCollection(params?: { limit?: number; runKey?: string }) {
+  const limit = params?.limit ?? toInt(process.env.BRIGHTDESK_TICKER_RESEARCH_LIMIT, 25);
+  const activeTickers = await getActiveResearchTickers(limit);
+  const tickerCollectors = activeTickers.map((item) => createTickerResearchCollector(item.ticker, item.label));
+  const startedAt = new Date().toISOString();
+  const result = await runCollection({ collectors: tickerCollectors, includeTickerResearch: false });
+  const sourceStats = result.bySource.ticker_research ?? { inserted: 0, skipped: 0 };
+
+  if (activeTickers.length > 0) {
+    await (supabaseAdmin as any)
+      .from("user_watchlist")
+      .update({ last_researched_at: new Date().toISOString() })
+      .eq("is_active", true)
+      .in("ticker", activeTickers.map((item) => item.ticker));
+
+    await (supabaseAdmin as any).from("ticker_research_runs").insert(
+      activeTickers.map((item) => ({
+        run_key: params?.runKey ?? null,
+        ticker: item.ticker,
+        status: "success",
+        collected: Math.round(result.collected / Math.max(1, activeTickers.length)),
+        inserted: Math.round(sourceStats.inserted / Math.max(1, activeTickers.length)),
+        skipped: Math.round(sourceStats.skipped / Math.max(1, activeTickers.length)),
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+      })),
+    );
+  }
+
+  return {
+    ...result,
+    tickers: activeTickers.map((item) => item.ticker),
+    byTicker: Object.fromEntries(activeTickers.map((item) => [item.ticker, sourceStats])),
+  };
+}
+
 function clamp01(value: number, fallback: number) {
   const safe = Number.isFinite(value) ? value : fallback;
   return Math.max(0, Math.min(1, safe));
@@ -345,6 +513,7 @@ function clamp01(value: number, fallback: number) {
 
 export async function runCollection(params?: {
   collectors?: CollectorStrategy[];
+  includeTickerResearch?: boolean;
 }): Promise<{
   collected: number;
   inserted: number;
@@ -356,14 +525,17 @@ export async function runCollection(params?: {
   let inserted = 0;
   let skipped = 0;
 
-  const targetCollectors = params?.collectors ?? collectors;
+  const targetCollectors = params?.collectors ?? [
+    ...collectors,
+    ...((params?.includeTickerResearch ?? true) ? await buildTickerResearchCollectors() : []),
+  ];
   const active = targetCollectors.filter((c) => c.isEnabled());
   if (active.length === 0) {
     return { collected, inserted, skipped, bySource };
   }
 
   for (const c of active) {
-    bySource[c.source] = { inserted: 0, skipped: 0 };
+    bySource[c.source] ??= { inserted: 0, skipped: 0 };
     let docs: RawDocCandidate[] = [];
     try {
       docs = await c.fetch();

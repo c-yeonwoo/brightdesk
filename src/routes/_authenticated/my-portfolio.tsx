@@ -22,6 +22,9 @@ import {
   saveUserHoldings,
   getUserHoldings,
   listRecommendations,
+  listWatchlist,
+  addWatchlistTicker,
+  removeWatchlistTicker,
 } from "@/lib/recommendations.functions";
 
 export const Route = createFileRoute("/_authenticated/my-portfolio")({
@@ -129,6 +132,11 @@ const MOCK_HISTORY = [
     rationale: "전일 기준으로는 QQQ 유지, MSFT 보유, 방어자산 관찰이 우선이었습니다.",
   },
 ];
+const MOCK_WATCHLIST = [
+  { id: "mock-watch-1", ticker: "NVDA", label: "NVIDIA", priority: 2, last_researched_at: new Date().toISOString() },
+  { id: "mock-watch-2", ticker: "TLT", label: "장기채 ETF", priority: 3, last_researched_at: null },
+  { id: "mock-watch-3", ticker: "TSLA", label: "Tesla", priority: 4, last_researched_at: null },
+];
 
 function MyPortfolioPage() {
   const qc = useQueryClient();
@@ -153,8 +161,16 @@ function MyPortfolioPage() {
       return listTickerSuggestions();
     },
   });
+  const { data: watchlist = [] } = useQuery({
+    queryKey: ["watchlist"],
+    queryFn: async () => {
+      if (USE_LOCAL_MOCK) return MOCK_WATCHLIST;
+      return listWatchlist();
+    },
+  });
 
   const [rows, setRows] = useState<Row[]>([EMPTY]);
+  const [watchTicker, setWatchTicker] = useState("");
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvText, setCsvText] = useState("");
 
@@ -195,7 +211,27 @@ function MyPortfolioPage() {
 
   const saveMut = useMutation({
     mutationFn: async () => (USE_LOCAL_MOCK ? { ok: true, portfolio_id: "mock-portfolio", count: holdings.length } : saveUserHoldings({ data: { holdings } })),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["user-holdings"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["user-holdings"] });
+      qc.invalidateQueries({ queryKey: ["watchlist"] });
+    },
+  });
+
+  const addWatchMut = useMutation({
+    mutationFn: async () =>
+      USE_LOCAL_MOCK
+        ? { ok: true, ticker: watchTicker.toUpperCase() }
+        : addWatchlistTicker({ data: { ticker: watchTicker, priority: 3 } }),
+    onSuccess: () => {
+      setWatchTicker("");
+      qc.invalidateQueries({ queryKey: ["watchlist"] });
+    },
+  });
+
+  const removeWatchMut = useMutation({
+    mutationFn: async (ticker: string) =>
+      USE_LOCAL_MOCK ? { ok: true } : removeWatchlistTicker({ data: { ticker } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlist"] }),
   });
 
   const recMut = useMutation({
@@ -317,6 +353,56 @@ function MyPortfolioPage() {
 
           <div className="mt-3 text-[11px] text-muted-foreground">
             한국 종목은 <code>.KS</code> (005930.KS) / 미국은 티커 그대로 (AAPL).
+          </div>
+
+          <div className="mt-5 border-t pt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">관심종목 리서치</h2>
+              <span className="text-[11px] text-muted-foreground">{watchlist.length}개</span>
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              여기에 둔 티커는 크론이 관련 자료를 모아 종목별 KB로 정리합니다.
+            </p>
+            <div className="flex gap-2">
+              <TickerPicker
+                value={watchTicker}
+                onChange={setWatchTicker}
+                suggestions={tickerSuggestions}
+              />
+              <Button
+                type="button"
+                size="sm"
+                disabled={!watchTicker.trim() || addWatchMut.isPending}
+                onClick={() => addWatchMut.mutate()}
+                className="h-10 shrink-0 sm:h-8"
+              >
+                추가
+              </Button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {watchlist.map((item: any) => (
+                <span
+                  key={item.id ?? item.ticker}
+                  className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs"
+                >
+                  <span className="font-mono font-semibold">{item.ticker}</span>
+                  {item.last_researched_at ? (
+                    <span className="text-[10px] text-muted-foreground">수집됨</span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => removeWatchMut.mutate(item.ticker)}
+                    aria-label={`${item.ticker} 관심종목 제거`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              {watchlist.length === 0 && (
+                <span className="text-xs text-muted-foreground">아직 관심종목이 없습니다.</span>
+              )}
+            </div>
           </div>
         </div>
 
