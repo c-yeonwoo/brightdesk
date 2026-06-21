@@ -144,6 +144,37 @@ export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
         }
 
         // 3) 시그널 생성(재시도 허용)
+        const priceSeedResult = await runWithRetry(
+          async () => {
+            const { refreshTickerPrices } = await import("@/lib/prices.server");
+            const tickers = (process.env.BRIGHTDESK_PAPER_STARTER_TICKERS ?? "SPY,QQQ,SMH,TLT,GLD")
+              .split(",")
+              .map((ticker) => ticker.trim().toUpperCase())
+              .filter(Boolean)
+              .slice(0, 12);
+            const results = [];
+            for (const ticker of tickers) {
+              try {
+                results.push(await refreshTickerPrices(ticker, "1y"));
+              } catch (error: any) {
+                results.push({ ticker, error: error?.message ?? String(error) });
+              }
+            }
+            return { tickers, results };
+          },
+          tradeSafeAttempts,
+          tradeSafeDelayMs,
+        );
+
+        retryMeta.price_seed = { attempts: priceSeedResult.attempts, retried: priceSeedResult.retried };
+        if (priceSeedResult.value !== null) {
+          log.price_seed = priceSeedResult.value;
+        } else {
+          failed = true;
+          log.price_seed_error = `${priceSeedResult.error} (attempt ${priceSeedResult.attempts}/${tradeSafeAttempts})`;
+        }
+
+        // 4) 시그널 생성(재시도 허용)
         const signalsResult = await runWithRetry(
           async () => {
             const { generateSignalsForAll } = await import("@/lib/signals.server");
@@ -161,7 +192,7 @@ export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
           log.signals_error = `${signalsResult.error} (attempt ${signalsResult.attempts}/${tradeSafeAttempts})`;
         }
 
-        // 4) 시장 레짐 평가(재시도 허용)
+        // 5) 시장 레짐 평가(재시도 허용)
         let regime: any = null;
         const regimeResult = await runWithRetry(
           async () => {
@@ -185,12 +216,13 @@ export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
           log.regime_error = `${regimeResult.error} (attempt ${regimeResult.attempts}/${tradeSafeAttempts})`;
         }
 
-        // 5) 트레이드 적용 및 스냅샷(실제 side-effect로 재시도 비권장)
+        // 6) 트레이드 적용 및 스냅샷(실제 side-effect로 재시도 비권장)
         if (!failed) {
           try {
             const {
               getOrCreateSystemPortfolio,
               applyAllRecentSignals,
+              applyStarterPaperAllocation,
               snapshotPortfolio,
               executeSignal,
             } = await import("@/lib/portfolio.server");
@@ -216,6 +248,11 @@ export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
               blockBuys: regime?.regime === "BEAR",
               confidenceMultiplier: regime?.confidence_multiplier ?? 1,
             } as any);
+            if ((log.applied?.applied ?? 0) === 0) {
+              log.starter_allocation = await applyStarterPaperAllocation(pf.id, {
+                blockBuys: regime?.regime === "BEAR",
+              });
+            }
             log.snapshot = await snapshotPortfolio(pf.id);
           } catch (e: any) {
             failed = true;

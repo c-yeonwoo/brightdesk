@@ -79,6 +79,12 @@ async function getLatestPrice(ticker: string): Promise<{ date: string; close: nu
   return { date: data[0].date as string, close: Number(data[0].close) };
 }
 
+async function getLatestPaperFill(ticker: string): Promise<{ date: string; open: number; fallback: true } | null> {
+  const latest = await getLatestPrice(ticker);
+  if (!latest) return null;
+  return { date: latest.date, open: latest.close, fallback: true };
+}
+
 export async function executeSignal(opts: {
   portfolioId: string;
   ticker: string;
@@ -93,7 +99,7 @@ export async function executeSignal(opts: {
 
 
   const dateOnly = signalDate.slice(0, 10);
-  const fill = await getNextDayOpen(ticker, dateOnly);
+  const fill = await getNextDayOpen(ticker, dateOnly) ?? await getLatestPaperFill(ticker);
   if (!fill) return { skipped: "no next-day price" };
 
   const sb = supabaseAdmin;
@@ -133,7 +139,9 @@ export async function executeSignal(opts: {
       tax: 0,
       signal_id: signalId,
       executed_at: new Date(fill.date).toISOString(),
-      note: note ?? (us ? `fx=${fxRate.toFixed(2)}` : null),
+      note: [note, (fill as any).fallback ? "paper_fill:latest_close" : null, us ? `fx=${fxRate.toFixed(2)}` : null]
+        .filter(Boolean)
+        .join(";") || null,
     });
 
 
@@ -238,7 +246,65 @@ export async function applyAllRecentSignals(
     });
     results.push({ ticker: s.ticker, kind: s.kind, conf: adjConf, ...r });
   }
-  return { applied: results.length, skipped: skipped.length, results, skipped_details: skipped };
+  return {
+    applied: results.filter((r) => !r.skipped).length,
+    skipped: skipped.length + results.filter((r) => r.skipped).length,
+    results,
+    skipped_details: skipped,
+  };
+}
+
+export async function applyStarterPaperAllocation(
+  portfolioId: string,
+  opts: { blockBuys?: boolean; maxPositions?: number; allocationKrw?: number } = {},
+) {
+  if (opts.blockBuys) {
+    return { applied: 0, skipped: 1, reason: "regime_block_buy", results: [] };
+  }
+
+  const sb = supabaseAdmin;
+  const { data: pf } = await sb.from("portfolios").select("*").eq("id", portfolioId).single();
+  if (!pf) throw new Error("portfolio not found");
+
+  const { data: positions } = await sb
+    .from("positions")
+    .select("ticker,qty")
+    .eq("portfolio_id", portfolioId)
+    .gt("qty", 0);
+  if ((positions ?? []).length > 0) {
+    return { applied: 0, skipped: 1, reason: "already_in_market", results: [] };
+  }
+
+  const cash = Number(pf.cash ?? 0);
+  if (cash < 500_000) {
+    return { applied: 0, skipped: 1, reason: "insufficient_cash", results: [] };
+  }
+
+  const tickers = (process.env.BRIGHTDESK_PAPER_STARTER_TICKERS ?? "SPY,QQQ,SMH,TLT")
+    .split(",")
+    .map((ticker) => ticker.trim().toUpperCase())
+    .filter(Boolean)
+    .slice(0, opts.maxPositions ?? 4);
+  const allocationKrw = opts.allocationKrw ?? Math.min(1_000_000, cash * 0.12);
+  const results: any[] = [];
+
+  for (const ticker of tickers) {
+    const r = await executeSignal({
+      portfolioId,
+      ticker,
+      kind: "BUY",
+      signalDate: new Date().toISOString(),
+      allocationKrw,
+      note: "starter_paper_allocation",
+    });
+    results.push({ ticker, kind: "BUY", ...r });
+  }
+
+  return {
+    applied: results.filter((r) => !r.skipped).length,
+    skipped: results.filter((r) => r.skipped).length,
+    results,
+  };
 }
 
 

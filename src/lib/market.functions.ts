@@ -522,8 +522,20 @@ async function buildLiveMarketDesk() {
 
   const factRows = ((facts ?? []) as FactRow[]).filter((f) => f.title);
   const signalRows = ((signals ?? []) as SignalRow[]).filter((s) => s.ticker);
-  const positions = ((pfRows?.[0] as any)?.positions ?? []) as PositionRow[];
+  const systemPortfolio = (pfRows?.[0] as any) ?? null;
+  const positions = (systemPortfolio?.positions ?? []) as PositionRow[];
   const ownedTickers = new Set(positions.filter((p) => Number(p.qty) > 0).map((p) => p.ticker));
+  const paperOverview = systemPortfolio?.id
+    ? await import("./portfolio.server")
+        .then(({ getPortfolioOverview }) => getPortfolioOverview(systemPortfolio.id))
+        .catch(() => null)
+    : null;
+  const paperSummary = paperOverview?.summary;
+  const paperInitial = Number(paperOverview?.portfolio?.initial_cash ?? 10_000_000);
+  const paperTotal = Number(paperSummary?.total ?? 10_000_000);
+  const paperCash = Number(paperSummary?.cash ?? 10_000_000);
+  const paperHoldings = Number(paperSummary?.holdings ?? 0);
+  const paperTransactions = Array.isArray(paperOverview?.transactions) ? paperOverview.transactions.length : 0;
 
   const macroFacts = factRows.filter((f) => f.domain === "macro" || f.domain === "politics");
   const themeFacts = factRows.filter((f) => f.domain === "theme" || f.domain === "news");
@@ -645,15 +657,18 @@ async function buildLiveMarketDesk() {
     },
     paper_portfolio: {
       label: "1,000만원 실증 포트폴리오",
-      initial_value: 10_000_000,
-      current_value: 10_000_000,
-      cash_weight: 1,
-      return_pct: 0,
+      initial_value: paperInitial,
+      current_value: paperTotal,
+      cash_weight: paperTotal > 0 ? paperCash / paperTotal : 1,
+      return_pct: paperInitial > 0 ? ((paperTotal - paperInitial) / paperInitial) * 100 : 0,
       benchmark_label: "SPY",
       benchmark_return_pct: null,
       max_drawdown_pct: 0,
-      trades_30d: 0,
-      note: "실거래가 아닌 가상 운용입니다. 신호와 결과가 쌓이면 수익률과 낙폭이 갱신됩니다.",
+      trades_30d: paperTransactions,
+      note:
+        paperHoldings > 0
+          ? "실거래가 아닌 가상 운용입니다. 크론이 신호와 추천 후보를 기준으로 분할 운용합니다."
+          : "아직 체결된 가상 포지션이 없습니다. 다음 크론에서 starter allocation이 실행됩니다.",
     },
     next_actions: nextActions,
     risk_alerts: riskAlerts,
