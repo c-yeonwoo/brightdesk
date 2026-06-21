@@ -147,11 +147,8 @@ export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
         const priceSeedResult = await runWithRetry(
           async () => {
             const { refreshTickerPrices } = await import("@/lib/prices.server");
-            const tickers = (process.env.BRIGHTDESK_PAPER_STARTER_TICKERS ?? "SPY,QQQ,SMH,TLT,GLD")
-              .split(",")
-              .map((ticker) => ticker.trim().toUpperCase())
-              .filter(Boolean)
-              .slice(0, 12);
+            const { getMonitoringUniverseStats, getPriceSeedTickers } = await import("@/lib/monitoring-universe.server");
+            const tickers = getPriceSeedTickers(runKey);
             const results = [];
             for (const ticker of tickers) {
               try {
@@ -160,7 +157,7 @@ export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
                 results.push({ ticker, error: error?.message ?? String(error) });
               }
             }
-            return { tickers, results };
+            return { universe: getMonitoringUniverseStats(), tickers, results };
           },
           tradeSafeAttempts,
           tradeSafeDelayMs,

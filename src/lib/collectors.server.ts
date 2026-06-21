@@ -2,6 +2,7 @@
 // Each collector produces RawDocument candidates; orchestrator dedupes by content_hash.
 import { createHash } from "crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getDefaultResearchTickers } from "./monitoring-universe.server";
 
 export type SourceType = string;
 
@@ -705,20 +706,16 @@ async function getActiveResearchTickers(limit: number) {
     }
   }
 
-  if (tickers.size === 0) {
-    const defaults = (process.env.BRIGHTDESK_TICKER_RESEARCH_DEFAULT_TICKERS ??
-      process.env.BRIGHTDESK_PAPER_STARTER_TICKERS ??
-      "SPY,QQQ,SMH,TLT,GLD")
-      .split(",")
-      .map((ticker) => normalizeTicker(ticker))
-      .filter(Boolean)
-      .slice(0, limit);
+  if (tickers.size < limit) {
+    const defaults = getDefaultResearchTickers().slice(0, limit);
     for (const ticker of defaults) {
+      if (tickers.has(ticker)) continue;
       tickers.set(ticker, {
         ticker,
         label: WELL_KNOWN_TICKER_LABELS[ticker] ?? null,
         priority: 5,
       });
+      if (tickers.size >= limit) break;
     }
   }
 
