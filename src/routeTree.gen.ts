@@ -25,6 +25,7 @@ import { Route as AuthenticatedPortfolioRouteImport } from './routes/_authentica
 import { Route as AuthenticatedMyPortfolioRouteImport } from './routes/_authenticated/my-portfolio'
 import { Route as ApiPublicCronHourlyRebalanceRouteImport } from './routes/api/public/cron/hourly-rebalance'
 import { Route as ApiPublicCronCollectRouteImport } from './routes/api/public/cron/collect'
+import { Route as ApiPublicCronBackfillMarketRouteImport } from './routes/api/public/cron/backfill-market'
 
 const TickersRoute = TickersRouteImport.update({
   id: '/tickers',
@@ -107,6 +108,12 @@ const ApiPublicCronCollectRoute = ApiPublicCronCollectRouteImport.update({
   path: '/api/public/cron/collect',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicCronBackfillMarketRoute =
+  ApiPublicCronBackfillMarketRouteImport.update({
+    id: '/api/public/cron/backfill-market',
+    path: '/api/public/cron/backfill-market',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/tickers': typeof TickersRoute
   '/my-portfolio': typeof AuthenticatedMyPortfolioRoute
   '/portfolio': typeof AuthenticatedPortfolioRoute
+  '/api/public/cron/backfill-market': typeof ApiPublicCronBackfillMarketRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
   '/api/public/cron/hourly-rebalance': typeof ApiPublicCronHourlyRebalanceRoute
 }
@@ -139,6 +147,7 @@ export interface FileRoutesByTo {
   '/tickers': typeof TickersRoute
   '/my-portfolio': typeof AuthenticatedMyPortfolioRoute
   '/portfolio': typeof AuthenticatedPortfolioRoute
+  '/api/public/cron/backfill-market': typeof ApiPublicCronBackfillMarketRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
   '/api/public/cron/hourly-rebalance': typeof ApiPublicCronHourlyRebalanceRoute
 }
@@ -158,6 +167,7 @@ export interface FileRoutesById {
   '/tickers': typeof TickersRoute
   '/_authenticated/my-portfolio': typeof AuthenticatedMyPortfolioRoute
   '/_authenticated/portfolio': typeof AuthenticatedPortfolioRoute
+  '/api/public/cron/backfill-market': typeof ApiPublicCronBackfillMarketRoute
   '/api/public/cron/collect': typeof ApiPublicCronCollectRoute
   '/api/public/cron/hourly-rebalance': typeof ApiPublicCronHourlyRebalanceRoute
 }
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/tickers'
     | '/my-portfolio'
     | '/portfolio'
+    | '/api/public/cron/backfill-market'
     | '/api/public/cron/collect'
     | '/api/public/cron/hourly-rebalance'
   fileRoutesByTo: FileRoutesByTo
@@ -194,6 +205,7 @@ export interface FileRouteTypes {
     | '/tickers'
     | '/my-portfolio'
     | '/portfolio'
+    | '/api/public/cron/backfill-market'
     | '/api/public/cron/collect'
     | '/api/public/cron/hourly-rebalance'
   id:
@@ -212,6 +224,7 @@ export interface FileRouteTypes {
     | '/tickers'
     | '/_authenticated/my-portfolio'
     | '/_authenticated/portfolio'
+    | '/api/public/cron/backfill-market'
     | '/api/public/cron/collect'
     | '/api/public/cron/hourly-rebalance'
   fileRoutesById: FileRoutesById
@@ -229,6 +242,7 @@ export interface RootRouteChildren {
   ScenariosRoute: typeof ScenariosRoute
   SignalsRoute: typeof SignalsRoute
   TickersRoute: typeof TickersRoute
+  ApiPublicCronBackfillMarketRoute: typeof ApiPublicCronBackfillMarketRoute
   ApiPublicCronCollectRoute: typeof ApiPublicCronCollectRoute
   ApiPublicCronHourlyRebalanceRoute: typeof ApiPublicCronHourlyRebalanceRoute
 }
@@ -347,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicCronCollectRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/cron/backfill-market': {
+      id: '/api/public/cron/backfill-market'
+      path: '/api/public/cron/backfill-market'
+      fullPath: '/api/public/cron/backfill-market'
+      preLoaderRoute: typeof ApiPublicCronBackfillMarketRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -376,6 +397,7 @@ const rootRouteChildren: RootRouteChildren = {
   ScenariosRoute: ScenariosRoute,
   SignalsRoute: SignalsRoute,
   TickersRoute: TickersRoute,
+  ApiPublicCronBackfillMarketRoute: ApiPublicCronBackfillMarketRoute,
   ApiPublicCronCollectRoute: ApiPublicCronCollectRoute,
   ApiPublicCronHourlyRebalanceRoute: ApiPublicCronHourlyRebalanceRoute,
 }
