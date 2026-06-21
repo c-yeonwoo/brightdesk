@@ -1095,7 +1095,7 @@ const REFINER_SYSTEM = `너는 한국 주식 투자용 지식베이스 정제 �
 응답 스키마: {"facts": ExtractedFact[]}
 - 공통 출력 스키마 버전: kb-facts-v1`;
 
-export async function refineOne(docId: string): Promise<{ ok: boolean; facts: number; error?: string }> {
+export async function refineOne(docId: string): Promise<{ ok: boolean; facts: number; error?: string; fallback?: boolean }> {
   const { data: doc, error } = await supabaseAdmin
     .from("raw_documents")
     .select("*")
@@ -1136,7 +1136,7 @@ ${(d.body ?? "").slice(0, 6000)}
     await (supabaseAdmin.from("raw_documents") as any)
       .update({ processed_at: new Date().toISOString() })
       .eq("id", d.id);
-    return { ok: true, facts: fallbackFacts.length, error: `fallback_refiner: ${(err as Error).message}` };
+    return { ok: true, facts: fallbackFacts.length, fallback: true };
   }
 
   let parsedFacts: ExtractedFact[];
@@ -1158,6 +1158,7 @@ ${(d.body ?? "").slice(0, 6000)}
 export async function runRefiner(limit = 10): Promise<{
   processed: number;
   factsCreated: number;
+  fallbackFactsCreated: number;
   errors: string[];
 }> {
   const { data: queue } = await supabaseAdmin
@@ -1169,13 +1170,17 @@ export async function runRefiner(limit = 10): Promise<{
 
   const ids = ((queue ?? []) as Array<{ id: string }>).map((r) => r.id);
   let factsCreated = 0;
+  let fallbackFactsCreated = 0;
   const errors: string[] = [];
 
   for (const id of ids) {
     const r = await refineOne(id);
-    if (r.ok) factsCreated += r.facts;
+    if (r.ok) {
+      factsCreated += r.facts;
+      if (r.fallback) fallbackFactsCreated += r.facts;
+    }
     else errors.push(`${id}: ${r.error}`);
   }
 
-  return { processed: ids.length, factsCreated, errors };
+  return { processed: ids.length, factsCreated, fallbackFactsCreated, errors };
 }

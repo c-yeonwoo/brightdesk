@@ -85,6 +85,14 @@ async function getLatestPaperFill(ticker: string): Promise<{ date: string; open:
   return { date: latest.date, open: latest.close, fallback: true };
 }
 
+async function getLatestPriceKrw(ticker: string): Promise<number | null> {
+  const latest = await getLatestPrice(ticker);
+  if (!latest) return null;
+  const us = isUsTicker(ticker);
+  const fx = us ? await getUsdKrwOn(latest.date) : 1;
+  return latest.close * fx;
+}
+
 export async function executeSignal(opts: {
   portfolioId: string;
   ticker: string;
@@ -122,7 +130,8 @@ export async function executeSignal(opts: {
   if (kind === "BUY") {
     const cash = Number(pf.cash); // KRW
     const allocKrw = Math.min(opts.allocationKrw ?? cash * 0.1, cash);
-    if (allocKrw < priceKrw) return { skipped: "insufficient cash" };
+    if (cash < priceKrw) return { skipped: "insufficient cash", price_krw: priceKrw, cash };
+    if (allocKrw < priceKrw) return { skipped: "price_above_allocation", price_krw: priceKrw, allocation_krw: allocKrw };
     const qty = Math.floor(allocKrw / (priceKrw * (1 + feeRate)));
     if (qty <= 0) return { skipped: "qty 0" };
     const costKrw = qty * priceKrw;
@@ -285,10 +294,18 @@ export async function applyStarterPaperAllocation(
     .map((ticker) => ticker.trim().toUpperCase())
     .filter(Boolean)
     .slice(0, opts.maxPositions ?? 4);
-  const allocationKrw = opts.allocationKrw ?? Math.min(1_000_000, cash * 0.12);
+  const targetDeployRatio = Math.max(0.05, Math.min(0.8, Number(process.env.BRIGHTDESK_PAPER_STARTER_DEPLOY_RATIO ?? 0.45)));
+  const targetDeployKrw = cash * targetDeployRatio;
+  const baseAllocationKrw =
+    opts.allocationKrw ??
+    Math.max(500_000, Math.min(2_000_000, targetDeployKrw / Math.max(1, tickers.length)));
   const results: any[] = [];
 
   for (const ticker of tickers) {
+    const latestPriceKrw = await getLatestPriceKrw(ticker);
+    const allocationKrw = latestPriceKrw
+      ? Math.min(cash, Math.max(baseAllocationKrw, latestPriceKrw * 1.01))
+      : baseAllocationKrw;
     const r = await executeSignal({
       portfolioId,
       ticker,
