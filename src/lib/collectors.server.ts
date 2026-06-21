@@ -1055,7 +1055,7 @@ function fallbackFactsForStructuredSource(doc: {
       summary: safeText(body).slice(0, 360) || `Collected ${doc.source} document for market knowledge base.`,
       related_tickers: tickers,
       sentiment: 0,
-      reliability: Math.min(reliability, 0.55),
+      reliability: Math.min(reliability, 0.68),
     },
   ];
 }

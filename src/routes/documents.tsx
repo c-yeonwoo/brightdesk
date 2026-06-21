@@ -113,7 +113,7 @@ function DocsPage() {
               fileName: uploadFile.name,
               mimeType: "text/plain",
               text,
-              reliability: 0.72,
+              reliability: 0.68,
               refine: true,
             },
           });
@@ -125,7 +125,7 @@ function DocsPage() {
             fileName: uploadFile.name,
             mimeType,
             base64,
-            reliability: 0.72,
+            reliability: 0.68,
             refine: true,
           },
         });
@@ -135,7 +135,7 @@ function DocsPage() {
           title,
           text: uploadText,
           mimeType: "text/plain",
-          reliability: 0.72,
+          reliability: 0.68,
           refine: true,
         },
       });
