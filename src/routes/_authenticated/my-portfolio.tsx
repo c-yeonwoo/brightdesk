@@ -25,6 +25,7 @@ import {
   listWatchlist,
   addWatchlistTicker,
   removeWatchlistTicker,
+  listWatchlistInsights,
 } from "@/lib/recommendations.functions";
 
 export const Route = createFileRoute("/_authenticated/my-portfolio")({
@@ -137,6 +138,31 @@ const MOCK_WATCHLIST = [
   { id: "mock-watch-2", ticker: "TLT", label: "장기채 ETF", priority: 3, last_researched_at: null },
   { id: "mock-watch-3", ticker: "TSLA", label: "Tesla", priority: 4, last_researched_at: null },
 ];
+const MOCK_WATCHLIST_INSIGHTS = {
+  tickers: MOCK_WATCHLIST,
+  facts: [
+    {
+      id: "mock-kb-nvda",
+      domain: "theme",
+      title: "AI capex 기대가 반도체 ETF와 NVDA 모멘텀을 지지",
+      summary: "데이터센터 투자와 HBM 수요가 반복적으로 확인되며 반도체 관심종목의 긍정 근거로 분류됩니다.",
+      related_tickers: ["NVDA", "SMH", "SOXX"],
+      sentiment: 0.62,
+      reliability: 0.76,
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: "mock-kb-tlt",
+      domain: "macro",
+      title: "장기채는 물가와 FOMC 확인 전까지 관찰 구간",
+      summary: "금리 인하 기대는 우호적이지만 서비스 물가와 고용 지표 확인이 필요합니다.",
+      related_tickers: ["TLT", "IEF"],
+      sentiment: 0.18,
+      reliability: 0.68,
+      updated_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+    },
+  ],
+};
 
 function MyPortfolioPage() {
   const qc = useQueryClient();
@@ -166,6 +192,13 @@ function MyPortfolioPage() {
     queryFn: async () => {
       if (USE_LOCAL_MOCK) return MOCK_WATCHLIST;
       return listWatchlist();
+    },
+  });
+  const { data: watchInsights } = useQuery({
+    queryKey: ["watchlist-insights"],
+    queryFn: async () => {
+      if (USE_LOCAL_MOCK) return MOCK_WATCHLIST_INSIGHTS;
+      return listWatchlistInsights({ data: { limit: 12 } });
     },
   });
 
@@ -214,6 +247,7 @@ function MyPortfolioPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["user-holdings"] });
       qc.invalidateQueries({ queryKey: ["watchlist"] });
+      qc.invalidateQueries({ queryKey: ["watchlist-insights"] });
     },
   });
 
@@ -231,8 +265,12 @@ function MyPortfolioPage() {
   const removeWatchMut = useMutation({
     mutationFn: async (ticker: string) =>
       USE_LOCAL_MOCK ? { ok: true } : removeWatchlistTicker({ data: { ticker } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlist"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["watchlist"] });
+      qc.invalidateQueries({ queryKey: ["watchlist-insights"] });
+    },
   });
+  const watchFacts = watchInsights?.facts ?? [];
 
   const recMut = useMutation({
     mutationFn: async () =>
@@ -482,6 +520,42 @@ function MyPortfolioPage() {
               </ul>
             </div>
           )}
+
+          <div className="mt-6 rounded-xl border bg-card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">관심종목 KB</h3>
+              <span className="text-[11px] text-muted-foreground">{watchFacts.length}개 근거</span>
+            </div>
+            {watchFacts.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
+                아직 관심종목과 연결된 KB가 없습니다. 관심종목을 추가한 뒤 크론을 실행하면 관련 공시·뉴스·거시 근거가 여기에 쌓입니다.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {watchFacts.map((fact: any) => (
+                  <div key={fact.id} className="rounded-lg border bg-background p-3">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                        {fact.domain}
+                      </span>
+                      {(fact.related_tickers ?? []).slice(0, 4).map((ticker: string) => (
+                        <span key={ticker} className="font-mono text-[10px] text-muted-foreground">
+                          {ticker}
+                        </span>
+                      ))}
+                      <span className="ml-auto text-[10px] text-muted-foreground">
+                        신뢰도 {Math.round(Number(fact.reliability ?? 0) * 100)}%
+                      </span>
+                    </div>
+                    <div className="text-xs font-semibold">{fact.title}</div>
+                    {fact.summary ? (
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{fact.summary}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </AppShell>

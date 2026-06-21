@@ -161,3 +161,37 @@ export const removeWatchlistTicker = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+export const listWatchlistInsights = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => z.object({ limit: z.number().int().min(1).max(50).optional() }).parse(d ?? {}))
+  .handler(async ({ data }) => {
+    const userId = await requireAuthenticatedUser();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: watchRows, error: watchError } = await (supabaseAdmin as any)
+      .from("user_watchlist")
+      .select("ticker,label,priority,last_researched_at")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .order("priority", { ascending: true })
+      .order("updated_at", { ascending: false });
+    if (watchError) throw new Error(watchError.message);
+
+    const tickers = Array.from(new Set((watchRows ?? []).map((row: any) => normalizeTicker(row.ticker)).filter(Boolean)));
+    if (tickers.length === 0) {
+      return { tickers: [], facts: [] };
+    }
+
+    const { data: facts, error } = await (supabaseAdmin as any)
+      .from("kb_facts")
+      .select("id,domain,title,summary,related_tickers,sentiment,reliability,updated_at,first_seen_at")
+      .eq("is_active", true)
+      .overlaps("related_tickers", tickers)
+      .order("updated_at", { ascending: false })
+      .limit(data.limit ?? 12);
+    if (error) throw new Error(error.message);
+
+    return {
+      tickers: watchRows ?? [],
+      facts: facts ?? [],
+    };
+  });

@@ -37,6 +37,8 @@ MVP 원칙: 먼저 원천성이 높고 구조가 안정적인 공식 소스를 �
 BRIGHTDESK_FED_RSS_URL=https://www.federalreserve.gov/feeds/press_all.xml
 BRIGHTDESK_SEC_RSS_URL=https://www.sec.gov/news/pressreleases.rss
 BRIGHTDESK_EIA_RSS_URL=https://www.eia.gov/tools/rssfeeds/
+FRED_API_KEY=
+DART_API_KEY=
 BRIGHTDESK_NEWS_RSS_URL=
 BRIGHTDESK_BROKER_PDF_RSS_URL=
 ```
@@ -44,7 +46,7 @@ BRIGHTDESK_BROKER_PDF_RSS_URL=
 ## 구현 우선순위
 
 1. Fed RSS, SEC RSS, EIA RSS를 `CollectorConfig`로 추가한다.
-2. FRED와 DART는 RSS보다 API connector로 별도 strategy를 만든다.
+2. FRED와 DART는 RSS보다 API connector로 별도 strategy를 만든다. (완료)
 3. 모든 소스는 `source`, `external_id`, `source_url`, `published_at`, `reliability`를 반드시 남긴다.
 4. LLM 정제 결과는 출처와 무관하게 공통 KB fact 스키마로 저장한다.
 5. 뉴스/블로그/영상은 투자 판단의 단독 근거로 쓰지 않고 공식 데이터와 교차검증한다.

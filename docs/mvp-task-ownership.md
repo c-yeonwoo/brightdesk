@@ -9,9 +9,9 @@
 - [x] FRED 공식 거시지표 API collector 추가
 - [x] source registry migration 추가
 - [x] 환경변수 예시 업데이트
-- [ ] DART 공시 API connector 추가
-- [ ] KRX/한국 시장 데이터 connector 추가
-- [ ] 관심종목별 KB/인사이트 화면 강화
+- [x] DART 공시 API connector 추가
+- [ ] KRX/한국 시장 데이터 connector 추가: 공식/안정 API 또는 배치 파일 경로 확정 후 진행
+- [x] 관심종목별 KB/인사이트 화면 강화
 - [ ] admin source 설정 화면 추가
 - [ ] Notion 통합 문서 최신화
 

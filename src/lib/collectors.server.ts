@@ -410,6 +410,124 @@ function createFredCollector(): CollectorStrategy {
   };
 }
 
+function formatYmd(date: Date) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}`;
+}
+
+function daysAgoYmd(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return formatYmd(d);
+}
+
+function createDartDisclosureCollector(): CollectorStrategy {
+  return {
+    source: "dart_disclosure",
+    isEnabled: () => Boolean(process.env.DART_API_KEY || process.env.OPENDART_API_KEY || process.env.BRIGHTDESK_DART_API_KEY),
+    async fetch() {
+      const apiKey = process.env.DART_API_KEY || process.env.OPENDART_API_KEY || process.env.BRIGHTDESK_DART_API_KEY;
+      if (!apiKey) return [];
+
+      const lookbackDays = toInt(process.env.BRIGHTDESK_DART_LOOKBACK_DAYS, 7);
+      const limit = toInt(process.env.BRIGHTDESK_DART_LIMIT, 40);
+      const corpCls = (process.env.BRIGHTDESK_DART_CORP_CLS ?? "Y,K")
+        .split(",")
+        .map((item) => item.trim().toUpperCase())
+        .filter(Boolean)
+        .slice(0, 4);
+
+      const docs: RawDocCandidate[] = [];
+      for (const cls of corpCls.length ? corpCls : ["Y", "K"]) {
+        const url = new URL("https://opendart.fss.or.kr/api/list.json");
+        url.searchParams.set("crtfc_key", apiKey);
+        url.searchParams.set("bgn_de", daysAgoYmd(lookbackDays));
+        url.searchParams.set("end_de", formatYmd(new Date()));
+        url.searchParams.set("last_reprt_at", "Y");
+        url.searchParams.set("corp_cls", cls);
+        url.searchParams.set("sort", "date");
+        url.searchParams.set("sort_mth", "desc");
+        url.searchParams.set("page_no", "1");
+        url.searchParams.set("page_count", String(Math.min(100, limit)));
+
+        const res = await fetch(url, {
+          headers: { "User-Agent": "BrightDesk-DART-Collector/1.0" },
+        });
+        if (!res.ok) {
+          throw new Error(`dart_disclosure ${cls} request failed: ${res.status} ${res.statusText}`);
+        }
+
+        const json = (await res.json()) as {
+          status?: string;
+          message?: string;
+          list?: Array<{
+            corp_code?: string;
+            corp_name?: string;
+            stock_code?: string;
+            corp_cls?: string;
+            report_nm?: string;
+            rcept_no?: string;
+            flr_nm?: string;
+            rcept_dt?: string;
+            rm?: string;
+          }>;
+        };
+
+        if (json.status && !["000", "013"].includes(json.status)) {
+          throw new Error(`dart_disclosure ${cls} error ${json.status}: ${json.message ?? "unknown"}`);
+        }
+
+        for (const item of (json.list ?? []).slice(0, limit)) {
+          const rceptNo = item.rcept_no ?? "";
+          const stockCode = item.stock_code?.trim();
+          const ticker = stockCode && stockCode !== " " ? `${stockCode}.KS` : null;
+          const sourceUrl = rceptNo ? `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${rceptNo}` : "https://dart.fss.or.kr/";
+          const title = `[DART] ${item.corp_name ?? "Unknown"} ${item.report_nm ?? "공시"}`;
+          const body = [
+            "source=dart-disclosure",
+            `corp_name=${item.corp_name ?? ""}`,
+            `corp_code=${item.corp_code ?? ""}`,
+            `stock_code=${stockCode ?? ""}`,
+            `ticker=${ticker ?? ""}`,
+            `corp_cls=${item.corp_cls ?? cls}`,
+            `report_name=${item.report_nm ?? ""}`,
+            `filer=${item.flr_nm ?? ""}`,
+            `receipt_no=${rceptNo}`,
+            `receipt_date=${item.rcept_dt ?? ""}`,
+            `remark=${item.rm ?? ""}`,
+            `source_url=${sourceUrl}`,
+            "",
+            "research_context=Official Korean DART disclosure. Extract facts about earnings, material events, financing, governance, shareholder changes, audits, and sector implications. Preserve the stock code as related ticker when available.",
+          ].join("\n");
+
+          docs.push({
+            source: "dart_disclosure",
+            external_id: `dart-${rceptNo || item.corp_code || item.corp_name}-${item.rcept_dt ?? ""}`,
+            title,
+            body,
+            published_at: normalizeDate(item.rcept_dt),
+            reliability: 0.9,
+            meta: {
+              corp_code: item.corp_code,
+              corp_name: item.corp_name,
+              stock_code: stockCode,
+              ticker,
+              corp_cls: item.corp_cls ?? cls,
+              report_name: item.report_nm,
+              receipt_no: rceptNo,
+              source_url: sourceUrl,
+            },
+          });
+        }
+      }
+
+      return docs.slice(0, limit);
+    },
+  };
+}
+
 const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
   {
     displayName: "Federal Reserve RSS",
@@ -505,6 +623,15 @@ export function getCollectorProfiles(): SourceProfile[] {
       limit: getFredSeriesIds().length,
       parserVersion: "kb-facts-v1" as const,
     },
+    {
+      source: "dart_disclosure",
+      displayName: "DART 공시 API",
+      kind: "api" as const,
+      enabled: Boolean(process.env.DART_API_KEY || process.env.OPENDART_API_KEY || process.env.BRIGHTDESK_DART_API_KEY),
+      reliability: 0.9,
+      limit: toInt(process.env.BRIGHTDESK_DART_LIMIT, 40),
+      parserVersion: "kb-facts-v1" as const,
+    },
   ];
 }
 
@@ -522,6 +649,9 @@ function getCollectorProfile(source: string) {
   }
   if (source === "fred_api") {
     return getCollectorProfiles().find((item) => item.source === "fred_api");
+  }
+  if (source === "dart_disclosure") {
+    return getCollectorProfiles().find((item) => item.source === "dart_disclosure");
   }
   return getCollectorProfiles().find((item) => item.source === source);
 }
@@ -643,6 +773,7 @@ export async function runCollection(params?: {
   const targetCollectors = params?.collectors ?? [
     ...collectors,
     createFredCollector(),
+    createDartDisclosureCollector(),
     ...((params?.includeTickerResearch ?? true) ? await buildTickerResearchCollectors() : []),
   ];
   const active = targetCollectors.filter((c) => c.isEnabled());
