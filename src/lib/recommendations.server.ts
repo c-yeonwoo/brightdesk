@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { computeSignalForTicker } from "./signals.server";
 import { getWinrate } from "./outcomes.server";
 import { isUsTicker, getUsdKrwSpot } from "./fx.server";
+import { buildSectorHeatMap, explainTickerWithSectorHeat } from "./sector-intel.server";
 
 export interface RecAction {
   action: "BUY" | "SELL" | "HOLD" | "REDUCE" | "ADD";
@@ -18,6 +19,11 @@ export interface RecAction {
   kb_score: number;
   total_score: number;
   fact_ids: string[];
+  sector?: string;
+  sector_heat_score?: number | null;
+  sector_rank?: number | null;
+  sector_reasons?: string[];
+  decision_summary?: string;
 }
 
 async function getLatestPrice(ticker: string): Promise<number | null> {
@@ -58,6 +64,7 @@ export async function generateRecommendation(opts: {
     });
   }
   const totalValue = holdingValues.reduce((s, h) => s + h.value, 0);
+  const sectorHeat = await buildSectorHeatMap({ days: 30, limit: 12 });
 
   // 후보 종목 수집 (보유 + 추가)
   let candidates: string[] = [];
@@ -81,8 +88,19 @@ export async function generateRecommendation(opts: {
       kind: sig.kind === "SELL" ? "SELL" : "BUY",
       minScore: undefined,
     });
+    const sector = explainTickerWithSectorHeat(t, sectorHeat);
     const held = holdingValues.find((h) => h.ticker === t);
     const currentWeight = held && totalValue > 0 ? held.value / totalValue : 0;
+    const decisionSummary = buildDecisionSummary({
+      ticker: t,
+      signalKind: sig.kind,
+      totalScore: sig.score,
+      confidence: sig.confidence,
+      winrate: wr.winrate,
+      winrateN: wr.n,
+      sector,
+      reasons: sig.reasons,
+    });
     scored.push({
       action: "HOLD",
       ticker: t,
@@ -98,6 +116,11 @@ export async function generateRecommendation(opts: {
       kb_score: sig.kb_score,
       total_score: sig.score,
       fact_ids: sig.fact_ids,
+      sector: sector.sector,
+      sector_heat_score: sector.sector_heat_score,
+      sector_rank: sector.sector_rank,
+      sector_reasons: sector.sector_reasons,
+      decision_summary: decisionSummary,
       value: held?.value ?? 0,
     });
   }
@@ -171,27 +194,52 @@ export async function generateRecommendation(opts: {
     return s + delta * (wr * 0.05); // 5% 추정 평균수익률
   }, 0);
 
-  const rationale = buildRationale(actions);
+  const rationale = buildRationale(actions, sectorHeat);
 
   return {
     actions,
     rationale,
+    sector_heat: sectorHeat,
     expected_return: Math.round(expectedReturn * 10000) / 100, // %
     expected_risk: null as number | null,
     total_value: totalValue,
   };
 }
 
-function buildRationale(actions: any[]): string {
+function buildDecisionSummary(args: {
+  ticker: string;
+  signalKind: string;
+  totalScore: number;
+  confidence: number;
+  winrate: number | null;
+  winrateN: number;
+  sector: ReturnType<typeof explainTickerWithSectorHeat>;
+  reasons: string[];
+}) {
+  const wr =
+    args.winrate == null
+      ? "검증 표본 부족"
+      : `과거 5거래일 적중률 ${(args.winrate * 100).toFixed(0)}% (${args.winrateN}건)`;
+  const sectorText =
+    args.sector.sector_heat_score == null
+      ? `${args.sector.sector} 섹터 heat 데이터 부족`
+      : `${args.sector.sector} heat ${args.sector.sector_heat_score.toFixed(2)} · ${args.sector.sector_rank}위`;
+  const reason = args.reasons[0] ?? "가격/KB/기본 점수를 종합";
+  return `${args.ticker}: ${args.signalKind} 점수 ${args.totalScore.toFixed(2)}, 확신도 ${(args.confidence * 100).toFixed(0)}%. ${sectorText}. ${wr}. 핵심 근거: ${reason}`;
+}
+
+function buildRationale(actions: any[], sectorHeat: any[]): string {
   const sells = actions.filter((a) => a.action === "SELL" || a.action === "REDUCE");
   const buys = actions.filter((a) => a.action === "BUY" || a.action === "ADD");
+  const hot = sectorHeat.slice(0, 3).map((s) => `${s.sector} ${s.heat_score}`).join(", ");
   const parts: string[] = [];
   if (sells.length) {
     parts.push(`매도/축소 ${sells.length}건: ${sells.map((s) => s.ticker).join(", ")} — 기술/기본/KB 종합 약세`);
   }
   if (buys.length) {
-    parts.push(`매수/추가 ${buys.length}건: ${buys.map((s) => s.ticker).join(", ")} — confidence × 승률 상위`);
+    parts.push(`매수/추가 ${buys.length}건: ${buys.map((s) => s.ticker).join(", ")} — confidence × 승률 × sector heat 상위`);
   }
+  if (hot) parts.push(`현재 강한 섹터: ${hot}`);
   if (parts.length === 0) parts.push("뚜렷한 재구성 신호 없음 — 현 비중 유지 권장");
   return parts.join(" / ");
 }

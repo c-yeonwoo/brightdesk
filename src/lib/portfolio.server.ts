@@ -231,6 +231,11 @@ export async function applyAllRecentSignals(
   const minConf = opts.minConfidence ?? 0.5;
   const results: any[] = [];
   const skipped: any[] = [];
+  const [{ buildSectorHeatMap, explainTickerWithSectorHeat }, { getWinrate }] = await Promise.all([
+    import("./sector-intel.server"),
+    import("./outcomes.server"),
+  ]);
+  const sectorHeat = await buildSectorHeatMap({ days: 30, limit: 12 });
 
   for (const s of sigs as any[]) {
     // 레짐 BEAR → 신규 BUY 차단 (SELL/REDUCE는 통과)
@@ -244,6 +249,20 @@ export async function applyAllRecentSignals(
       skipped.push({ ticker: s.ticker, reason: `low_confidence(${adjConf.toFixed(2)})` });
       continue;
     }
+    const sector = explainTickerWithSectorHeat(s.ticker, sectorHeat);
+    const wr = await getWinrate({
+      ticker: s.ticker,
+      kind: s.kind === "SELL" ? "SELL" : "BUY",
+    });
+    const reasonBits = [
+      `decision:${s.kind}`,
+      `score=${Number(s.score ?? 0).toFixed(2)}`,
+      `conf=${adjConf.toFixed(2)}`,
+      `sector=${sector.sector}`,
+      sector.sector_heat_score != null ? `sector_heat=${sector.sector_heat_score.toFixed(2)}` : null,
+      wr.winrate != null ? `winrate_5d=${(wr.winrate * 100).toFixed(0)}%(${wr.n})` : "winrate_5d=pending",
+      Array.isArray(s.reasons) && s.reasons[0] ? `why=${String(s.reasons[0]).slice(0, 120)}` : null,
+    ].filter(Boolean);
     const r = await executeSignal({
       portfolioId,
       ticker: s.ticker,
@@ -251,9 +270,9 @@ export async function applyAllRecentSignals(
       signalDate: s.ts,
       signalId: s.id,
       allocationKrw: 1500000, // 15% per BUY
-      note: s.kind === "SELL" ? "sell_reason:SIGNAL" : undefined,
+      note: s.kind === "SELL" ? `sell_reason:SIGNAL;${reasonBits.join(";")}` : reasonBits.join(";"),
     });
-    results.push({ ticker: s.ticker, kind: s.kind, conf: adjConf, ...r });
+    results.push({ ticker: s.ticker, kind: s.kind, conf: adjConf, sector, winrate: wr, ...r });
   }
   return {
     applied: results.filter((r) => !r.skipped).length,

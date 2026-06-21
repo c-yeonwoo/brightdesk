@@ -267,3 +267,69 @@ export function getMonitoringUniverseStats() {
     kosdaqFocus: KOSDAQ_FOCUS.length,
   };
 }
+
+
+async function fetchNaverMarketCapTickers(market: "kospi" | "kosdaq", limit: number) {
+  const sosok = market === "kospi" ? "0" : "1";
+  const suffix = market === "kospi" ? ".KS" : ".KQ";
+  const out: string[] = [];
+  const pages = Math.ceil(limit / 50);
+
+  for (let page = 1; page <= pages; page++) {
+    const url = `https://finance.naver.com/sise/sise_market_sum.naver?sosok=${sosok}&page=${page}`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "BrightDesk-KRX-Universe/1.0",
+        Accept: "text/html,*/*",
+      },
+    });
+    if (!res.ok) throw new Error(`Naver market cap ${market} request failed: ${res.status}`);
+    const buf = await res.arrayBuffer();
+    const html = new TextDecoder("euc-kr").decode(buf);
+    const matches = html.matchAll(/\/item\/main\.naver\?code=(\d{6})/g);
+    for (const match of matches) {
+      const ticker = `${match[1]}${suffix}`;
+      if (!out.includes(ticker)) out.push(ticker);
+      if (out.length >= limit) break;
+    }
+    if (out.length >= limit) break;
+  }
+
+  return out;
+}
+
+export async function getDynamicKrxTopTickers() {
+  const enabled = (process.env.BRIGHTDESK_KRX_TOP100_AUTO ?? "true").toLowerCase() !== "false";
+  if (!enabled) return [] as string[];
+  const kospiLimit = Number.parseInt(process.env.BRIGHTDESK_KRX_KOSPI_LIMIT ?? "", 10) || 100;
+  const kosdaqLimit = Number.parseInt(process.env.BRIGHTDESK_KRX_KOSDAQ_LIMIT ?? "", 10) || 100;
+  try {
+    const [kospi, kosdaq] = await Promise.all([
+      fetchNaverMarketCapTickers("kospi", kospiLimit),
+      fetchNaverMarketCapTickers("kosdaq", kosdaqLimit),
+    ]);
+    return unique([...kospi, ...kosdaq]);
+  } catch {
+    return [] as string[];
+  }
+}
+
+export async function getMonitoringUniverseAsync() {
+  const dynamicKrx = await getDynamicKrxTopTickers();
+  return unique([...getMonitoringUniverse(), ...dynamicKrx]);
+}
+
+export async function getPriceSeedTickersAsync(seed?: string) {
+  const limit = Number.parseInt(process.env.BRIGHTDESK_PRICE_SEED_LIMIT ?? "", 10) || 80;
+  const always = unique([
+    ...CORE_ETFS.slice(0, 8),
+    ...MAGNIFICENT_7,
+    ...envTickers("BRIGHTDESK_PRICE_SEED_ALWAYS_TICKERS"),
+  ]);
+  const dynamicKrx = await getDynamicKrxTopTickers();
+  const rotating = rotate(
+    unique([...CORE_ETFS.slice(8), ...SP500_FOCUS, ...KOSPI_FOCUS, ...KOSDAQ_FOCUS, ...dynamicKrx]),
+    bucketOffset(seed),
+  );
+  return unique([...always, ...rotating]).slice(0, limit);
+}

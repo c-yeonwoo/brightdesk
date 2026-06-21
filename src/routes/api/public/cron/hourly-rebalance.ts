@@ -147,8 +147,8 @@ export const Route = createFileRoute("/api/public/cron/hourly-rebalance")({
         const priceSeedResult = await runWithRetry(
           async () => {
             const { refreshTickerPrices } = await import("@/lib/prices.server");
-            const { getMonitoringUniverseStats, getPriceSeedTickers } = await import("@/lib/monitoring-universe.server");
-            const tickers = getPriceSeedTickers(runKey);
+            const { getMonitoringUniverseStats, getPriceSeedTickersAsync } = await import("@/lib/monitoring-universe.server");
+            const tickers = await getPriceSeedTickersAsync(runKey);
             const results = [];
             for (const ticker of tickers) {
               try {

@@ -501,6 +501,7 @@ function buildOpportunity(args: {
 
 async function buildLiveMarketDesk() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { buildSectorHeatMap } = await import("./sector-intel.server");
   const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
 
   const [{ data: facts }, { data: signals }, { data: pfRows }] = await Promise.all([
@@ -583,12 +584,17 @@ async function buildLiveMarketDesk() {
   ];
 
   const confidence = clamp(0.38 + Math.min(factRows.length, 30) / 80 + Math.min(signalRows.length, 40) / 120, 0.3, 0.86);
+  const sectorHeat = await buildSectorHeatMap({ days: 30, limit: 12 });
+  const hottestSectors = sectorHeat.slice(0, 4);
   const topPositive = opportunities.filter((o) => ["ACCUMULATE", "ADD", "HOLD"].includes(o.action)).slice(0, 3);
   const topDefensive = opportunities.filter((o) => ["REDUCE", "AVOID"].includes(o.action)).slice(0, 2);
   const nextActions = [
     topPositive[0]
       ? `${topPositive[0].symbol}부터 검토: ${topPositive[0].action_label} · ${topPositive[0].reasons[0]}`
       : "추천 후보가 부족합니다. 먼저 문서/웹 링크를 넣어 KB 근거를 보강하세요.",
+    hottestSectors[0]
+      ? `섹터 heat 1위 ${hottestSectors[0].sector}: ${hottestSectors[0].reasons[0] ?? "가격/KB/시그널 동시 확인"}`
+      : "섹터 heat 데이터가 부족합니다. 백필을 먼저 실행하세요.",
     positions.length > 0
       ? `보유 ${positions.length}개 종목과 신규 후보의 중복 노출을 확인하세요.`
       : "내 포트폴리오를 입력하면 보유 종목 기준으로 비중 확대/축소 신호가 정리됩니다.",
@@ -645,9 +651,11 @@ async function buildLiveMarketDesk() {
         factRows[0]?.summary ??
         "아직 최근 KB fact가 부족합니다. RSS 소스와 AI 정제를 연결한 뒤 시장 브리프 품질이 올라갑니다.",
       active_themes: activeThemes,
+      sector_heat: hottestSectors,
       key_drivers: topFacts.slice(0, 3),
     },
     opportunities,
+    sector_heat: sectorHeat,
     portfolio: {
       positions,
       notes: portfolioNotes,

@@ -12,6 +12,7 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
   const { getWinrate } = await import("./outcomes.server");
   const { getMarketRegime, getNormalizedBenchmarkCurve } = await import("./regime.server");
   const { checkExits } = await import("./risk.server");
+  const { buildSectorHeatMap, explainTickerWithSectorHeat } = await import("./sector-intel.server");
 
 
   const pf = await getOrCreateSystemPortfolio();
@@ -60,17 +61,29 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
     new Set(((recentTxnsRaw ?? []) as any[]).map((t) => t.signal_id).filter(Boolean)),
   );
   const sigMap = new Map<string, any>();
+  const outcomeMap = new Map<string, any>();
   if (signalIds.length > 0) {
-    const { data: sigRows } = await supabaseAdmin
-      .from("signals")
-      .select("id,kind,score,confidence,technical_score,fundamental_score,kb_score,reasons,weights,fact_ids")
-      .in("id", signalIds);
+    const [{ data: sigRows }, { data: outcomeRows }] = await Promise.all([
+      supabaseAdmin
+        .from("signals")
+        .select("id,ticker,kind,score,confidence,technical_score,fundamental_score,kb_score,reasons,weights,fact_ids")
+        .in("id", signalIds),
+      supabaseAdmin
+        .from("signal_outcomes")
+        .select("signal_id,hit,ret_5d,ret_20d,evaluated_at")
+        .in("signal_id", signalIds),
+    ]);
     for (const s of (sigRows ?? []) as any[]) sigMap.set(s.id, s);
+    for (const o of (outcomeRows ?? []) as any[]) outcomeMap.set(o.signal_id, o);
   }
+
+  const sectorHeat = await buildSectorHeatMap({ days: 30, limit: 12 });
 
   // 거래 원장 (각 거래에 근거 첨부)
   const tradeLedger = ((recentTxnsRaw ?? []) as any[]).map((t) => {
     const sig = t.signal_id ? sigMap.get(t.signal_id) : null;
+    const outcome = t.signal_id ? outcomeMap.get(t.signal_id) : null;
+    const sector = explainTickerWithSectorHeat(t.ticker, sectorHeat);
     const gross = Number(t.qty) * Number(t.price);
     return {
       id: t.id,
@@ -83,9 +96,19 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
       tax: Number(t.tax ?? 0),
       executed_at: t.executed_at,
       note: t.note,
+      sector,
+      outcome: outcome
+        ? {
+            hit: outcome.hit,
+            ret_5d: outcome.ret_5d != null ? Number(outcome.ret_5d) : null,
+            ret_20d: outcome.ret_20d != null ? Number(outcome.ret_20d) : null,
+            evaluated_at: outcome.evaluated_at,
+          }
+        : null,
       signal: sig
         ? {
             id: sig.id,
+            ticker: sig.ticker,
             kind: sig.kind,
             score: Number(sig.score),
             confidence: sig.confidence != null ? Number(sig.confidence) : null,
@@ -94,6 +117,13 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
             kb: sig.kb_score != null ? Number(sig.kb_score) : null,
             reasons: Array.isArray(sig.reasons) ? sig.reasons : [],
             weights: sig.weights ?? null,
+            decision_summary: [
+              `${t.ticker} ${sig.kind} · 점수 ${Number(sig.score ?? 0).toFixed(2)}`,
+              sector.sector_heat_score != null
+                ? `${sector.sector} heat ${sector.sector_heat_score.toFixed(2)}`
+                : `${sector.sector} heat 대기`,
+              Array.isArray(sig.reasons) && sig.reasons[0] ? sig.reasons[0] : null,
+            ].filter(Boolean).join(" · "),
           }
         : null,
     };
@@ -172,6 +202,7 @@ export const getLiveDashboard = createServerFn({ method: "GET" }).handler(async 
     trade_ledger: tradeLedger,
     txns_7d_count: txns7.length,
     recent_facts: recentFacts ?? [],
+    sector_heat: sectorHeat,
     winrate: { buy: buyWR, sell: sellWR },
     regime,
     exit_alerts: exitChecks.filter((e) => e.triggered),
