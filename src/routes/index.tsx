@@ -20,6 +20,8 @@ import {
   Zap,
 } from "lucide-react";
 import { AppShell } from "@/components/kb/AppShell";
+import { TradeLedger } from "@/components/kb/TradeLedger";
+import { getLiveDashboard } from "@/lib/dashboard.functions";
 import { getMarketDesk, listMarketDeskHistory } from "@/lib/market.functions";
 import { usePlainMode } from "@/lib/plain-mode";
 
@@ -75,6 +77,11 @@ function MarketPulsePage() {
     queryFn: () => listMarketDeskHistory(),
     refetchInterval: 10 * 60 * 1000,
   });
+  const { data: liveDashboard } = useQuery({
+    queryKey: ["live-dashboard"],
+    queryFn: () => getLiveDashboard(),
+    refetchInterval: 10 * 60 * 1000,
+  });
 
   return (
     <AppShell>
@@ -112,7 +119,15 @@ function MarketPulsePage() {
         </div>
       </div>
 
-      {isLoading || !data ? <Skeleton /> : <MarketPulseContent data={data as any} history={(history ?? []) as any[]} />}
+      {isLoading || !data ? (
+        <Skeleton />
+      ) : (
+        <MarketPulseContent
+          data={data as any}
+          history={(history ?? []) as any[]}
+          liveDashboard={liveDashboard as any}
+        />
+      )}
     </AppShell>
   );
 }
@@ -130,14 +145,14 @@ function Skeleton() {
   );
 }
 
-function MarketPulseContent({ data, history }: { data: any; history: any[] }) {
+function MarketPulseContent({ data, history, liveDashboard }: { data: any; history: any[]; liveDashboard?: any }) {
   const { plain } = usePlainMode();
   const Trend = trendIcon[data.brief.trend as keyof typeof trendIcon] ?? LineChart;
   const healthLow = data.health.facts < 3;
   const confidence = Number(data.market_read?.confidence ?? 0.35);
 
   if (plain) {
-    return <EasyMarketPulseContent data={data} history={history} />;
+    return <EasyMarketPulseContent data={data} history={history} liveDashboard={liveDashboard} />;
   }
 
   return (
@@ -278,6 +293,7 @@ function MarketPulseContent({ data, history }: { data: any; history: any[] }) {
       </section>
 
       <PaperPortfolioCard data={data.paper_portfolio} expert />
+      <PaperPortfolioDetail liveDashboard={liveDashboard} expert />
 
       <section>
         <div className="mb-3 flex items-center justify-between">
@@ -356,7 +372,7 @@ function MarketPulseContent({ data, history }: { data: any; history: any[] }) {
   );
 }
 
-function EasyMarketPulseContent({ data, history }: { data: any; history: any[] }) {
+function EasyMarketPulseContent({ data, history, liveDashboard }: { data: any; history: any[]; liveDashboard?: any }) {
   const Trend = trendIcon[data.brief.trend as keyof typeof trendIcon] ?? LineChart;
   const topPick = (data.opportunities ?? [])[0];
   const secondPick = (data.opportunities ?? [])[1];
@@ -428,6 +444,7 @@ function EasyMarketPulseContent({ data, history }: { data: any; history: any[] }
       </section>
 
       <PaperPortfolioCard data={data.paper_portfolio} />
+      <PaperPortfolioDetail liveDashboard={liveDashboard} />
 
       <MarketHistoryPanel history={history} />
 
@@ -512,6 +529,84 @@ function PaperPortfolioCard({ data, expert = false }: { data: any; expert?: bool
         />
         <PaperMetric label={expert ? "MDD" : "최대 낙폭"} value={`${Number(data.max_drawdown_pct ?? 0).toFixed(1)}%`} tone="neg" />
       </div>
+    </section>
+  );
+}
+
+function PaperPortfolioDetail({ liveDashboard, expert = false }: { liveDashboard?: any; expert?: boolean }) {
+  if (!liveDashboard) {
+    return (
+      <section className="rounded-3xl border bg-card p-5">
+        <div className="h-40 animate-pulse rounded-2xl bg-muted/60" />
+      </section>
+    );
+  }
+
+  const positions = Array.isArray(liveDashboard.positions) ? liveDashboard.positions : [];
+  const trades = Array.isArray(liveDashboard.trade_ledger) ? liveDashboard.trade_ledger : [];
+
+  return (
+    <section className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+      <div className="rounded-3xl border bg-card p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              <Briefcase className="h-4 w-4" />
+              실증 포트폴리오 구성
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              현재 보유 종목, 비중, 평가손익을 함께 봅니다.
+            </p>
+          </div>
+          <span className="rounded-md border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
+            {positions.length}종목
+          </span>
+        </div>
+
+        {positions.length === 0 ? (
+          <div className="rounded-2xl border bg-background p-5 text-sm text-muted-foreground">
+            아직 보유 종목이 없습니다. 백필 후 hourly cron이 starter allocation 또는 신뢰도 높은 시그널을 만나면 구성이 생깁니다.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {positions.map((p: any) => {
+              const total = Number(liveDashboard.summary?.total ?? 0);
+              const value = Number(p.market_value ?? 0);
+              const weight = total > 0 ? value / total : 0;
+              const pnl = Number(p.pl ?? 0);
+              return (
+                <div key={p.id ?? p.ticker} className="rounded-2xl border bg-background p-3">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{p.ticker}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {Number(p.qty).toLocaleString("ko-KR")}주 · 비중 {pct(weight)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold tabular-nums">{Math.round(value).toLocaleString("ko-KR")}원</div>
+                      <div className={`text-[11px] tabular-nums ${pnl >= 0 ? "text-success" : "text-danger"}`}>
+                        {pnl >= 0 ? "+" : ""}{Math.round(pnl).toLocaleString("ko-KR")}원
+                      </div>
+                    </div>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, weight * 100)}%` }} />
+                  </div>
+                  {expert && (
+                    <div className="mt-2 text-[11px] text-muted-foreground">
+                      평단 {Number(p.avg_price_krw ?? p.avg_price ?? 0).toLocaleString("ko-KR")}원 · 현재가{" "}
+                      {Number(p.last_price_krw ?? p.last_price ?? 0).toLocaleString("ko-KR")}원
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <TradeLedger trades={trades} />
     </section>
   );
 }

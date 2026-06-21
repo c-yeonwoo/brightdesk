@@ -30,8 +30,21 @@ type Trade = {
   tax: number;
   executed_at: string;
   note?: string | null;
+  sector?: {
+    sector: string;
+    sector_heat_score: number | null;
+    sector_rank: number | null;
+    sector_reasons: string[];
+  };
+  outcome?: {
+    hit: boolean | null;
+    ret_5d: number | null;
+    ret_20d: number | null;
+    evaluated_at: string | null;
+  } | null;
   signal: {
     id: string;
+    ticker?: string;
     kind: string;
     score: number;
     confidence: number | null;
@@ -40,6 +53,7 @@ type Trade = {
     kb: number | null;
     reasons: any[];
     weights: any;
+    decision_summary?: string;
   } | null;
 };
 
@@ -102,6 +116,7 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
           const confPct = sig?.confidence != null ? sig.confidence * 100 : null;
           const sellReason = !isBuy ? parseSellReason(t.note) : null;
           const reasonStyle = sellReason ? SELL_REASON_STYLE[sellReason] : null;
+          const outcomeReady = t.outcome && t.outcome.hit != null;
 
           return (
             <li key={t.id}>
@@ -154,6 +169,20 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
                         신뢰도 {confPct.toFixed(0)}%
                       </span>
                     )}
+                    {t.sector?.sector_heat_score != null && (
+                      <span className="rounded-full bg-info/10 px-1.5 py-0.5 text-[10px] font-medium text-info">
+                        {t.sector.sector} heat {t.sector.sector_heat_score.toFixed(2)}
+                      </span>
+                    )}
+                    {outcomeReady && (
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                          t.outcome?.hit ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
+                        }`}
+                      >
+                        5일 검증 {t.outcome?.hit ? "적중" : "미달"}
+                      </span>
+                    )}
                     {!sig && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning">
                         <Info className="h-2.5 w-2.5" />
@@ -195,6 +224,11 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
                             {((sig.weights.kb ?? 0) * 100).toFixed(0)}%
                           </div>
                         )}
+                        {sig.decision_summary && (
+                          <div className="mt-3 rounded-xl border bg-card p-3 text-xs leading-5 text-muted-foreground">
+                            {sig.decision_summary}
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -219,6 +253,46 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
                           <span className="rounded bg-card px-1.5 py-0.5">수수료 {fmt(t.fee)}원</span>
                           {t.tax > 0 && <span className="rounded bg-card px-1.5 py-0.5">세금 {fmt(t.tax)}원</span>}
                           <span className="rounded bg-card px-1.5 py-0.5">시그널 #{sig.id.slice(0, 8)}</span>
+                          {t.sector?.sector_rank != null && (
+                            <span className="rounded bg-card px-1.5 py-0.5">
+                              섹터 {t.sector.sector_rank}위
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <div className="rounded-xl border bg-card p-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              Sector heat
+                            </div>
+                            <div className="mt-1 text-sm font-semibold">
+                              {t.sector?.sector ?? "대기"} ·{" "}
+                              {t.sector?.sector_heat_score != null ? t.sector.sector_heat_score.toFixed(2) : "대기"}
+                            </div>
+                            {(t.sector?.sector_reasons ?? []).slice(0, 1).map((reason) => (
+                              <p key={reason} className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                                {reason}
+                              </p>
+                            ))}
+                          </div>
+                          <div className="rounded-xl border bg-card p-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              사후 검증
+                            </div>
+                            {t.outcome ? (
+                              <div className="mt-1 text-sm">
+                                <span className={t.outcome.hit ? "font-semibold text-success" : "font-semibold text-danger"}>
+                                  {t.outcome.hit == null ? "검증 대기" : t.outcome.hit ? "적중" : "미달"}
+                                </span>
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  5d {t.outcome.ret_5d == null ? "-" : `${(t.outcome.ret_5d * 100).toFixed(2)}%`}
+                                </span>
+                              </div>
+                            ) : (
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                5거래일 경과 후 자동 검증됩니다.
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

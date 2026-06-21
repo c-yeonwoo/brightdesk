@@ -1025,7 +1025,39 @@ function fallbackFactsForStructuredSource(doc: {
     ];
   }
 
-  return [];
+  const title = doc.title ?? `${doc.source} market update`;
+  const body = doc.body ?? "";
+  const tickers = Array.from(
+    new Set(
+      [
+        ...Array.from(body.matchAll(/\b[A-Z]{1,5}(?:\.(?:KS|KQ))?\b/g)).map((m) => m[0]),
+        ...Array.from(body.matchAll(/\b\d{6}\b/g)).map((m) => m[0]),
+      ]
+        .filter((ticker) => !["HTTP", "RSS", "API", "HTML", "JSON"].includes(ticker))
+        .slice(0, 8),
+    ),
+  );
+  const lower = `${doc.source} ${title} ${body.slice(0, 1000)}`.toLowerCase();
+  const domain: FactDomain =
+    /fed|fomc|fred|rate|yield|cpi|inflation|금리|물가|연준|환율|유가/.test(lower)
+      ? "macro"
+      : /policy|politic|election|tariff|regulation|정책|규제|대선|관세|지정학/.test(lower)
+        ? "politics"
+        : /sector|industry|theme|ai|semiconductor|battery|산업|테마|반도체|배터리/.test(lower)
+          ? "theme"
+          : "news";
+
+  return [
+    {
+      domain,
+      fact_key: `fallback-${slug(doc.source)}-${slug(doc.id)}`,
+      title,
+      summary: safeText(body).slice(0, 360) || `Collected ${doc.source} document for market knowledge base.`,
+      related_tickers: tickers,
+      sentiment: 0,
+      reliability: Math.min(reliability, 0.55),
+    },
+  ];
 }
 
 async function writeExtractedFacts(
@@ -1140,7 +1172,21 @@ ${(d.body ?? "").slice(0, 6000)}
   try {
     parsedFacts = safeParseFactList(raw);
   } catch {
-    return { ok: false, facts: 0, error: "AI 응답 JSON 스키마/파싱 실패" };
+    const fallbackFacts = fallbackFactsForStructuredSource(d);
+    await writeExtractedFacts(d, fallbackFacts, promptVersion);
+    await (supabaseAdmin.from("raw_documents") as any)
+      .update({ processed_at: new Date().toISOString() })
+      .eq("id", d.id);
+    return { ok: true, facts: fallbackFacts.length, fallback: true };
+  }
+
+  if (parsedFacts.length === 0) {
+    parsedFacts = fallbackFactsForStructuredSource(d);
+    await writeExtractedFacts(d, parsedFacts, promptVersion);
+    await (supabaseAdmin.from("raw_documents") as any)
+      .update({ processed_at: new Date().toISOString() })
+      .eq("id", d.id);
+    return { ok: true, facts: parsedFacts.length, fallback: true };
   }
 
   await writeExtractedFacts(d, parsedFacts, promptVersion);
