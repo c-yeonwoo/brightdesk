@@ -705,6 +705,23 @@ async function getActiveResearchTickers(limit: number) {
     }
   }
 
+  if (tickers.size === 0) {
+    const defaults = (process.env.BRIGHTDESK_TICKER_RESEARCH_DEFAULT_TICKERS ??
+      process.env.BRIGHTDESK_PAPER_STARTER_TICKERS ??
+      "SPY,QQQ,SMH,TLT,GLD")
+      .split(",")
+      .map((ticker) => normalizeTicker(ticker))
+      .filter(Boolean)
+      .slice(0, limit);
+    for (const ticker of defaults) {
+      tickers.set(ticker, {
+        ticker,
+        label: WELL_KNOWN_TICKER_LABELS[ticker] ?? null,
+        priority: 5,
+      });
+    }
+  }
+
   return Array.from(tickers.values()).slice(0, limit);
 }
 
@@ -927,6 +944,138 @@ function safeParseFactList(raw: string): ExtractedFact[] {
   return valid;
 }
 
+function slug(input: string) {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+}
+
+function bodyValue(body: string | null | undefined, key: string) {
+  const match = (body ?? "").match(new RegExp(`^${key}=([^\\n]*)`, "m"));
+  return match?.[1]?.trim() || "";
+}
+
+function fredRelatedTickers(seriesId: string) {
+  if (["FEDFUNDS", "DGS10", "DGS2"].includes(seriesId)) return ["TLT", "IEF", "QQQ", "SPY"];
+  if (seriesId === "CPIAUCSL") return ["TLT", "QQQ", "GLD"];
+  if (seriesId === "UNRATE") return ["SPY", "QQQ"];
+  if (seriesId === "DCOILWTICO") return ["XLE", "GLD"];
+  if (seriesId === "DTWEXBGS") return ["GLD", "SPY", "QQQ"];
+  return [];
+}
+
+function fallbackFactsForStructuredSource(doc: {
+  id: string;
+  source: string;
+  title: string | null;
+  body: string | null;
+  reliability: number | null;
+}): ExtractedFact[] {
+  const reliability = clampPositive(Number(doc.reliability ?? 0.7), 0, 1, 0.7);
+
+  if (doc.source === "fred_api") {
+    const seriesId = bodyValue(doc.body, "series_id") || slug(doc.title ?? "fred");
+    const label = bodyValue(doc.body, "series_label") || seriesId;
+    const latestDate = bodyValue(doc.body, "latest_date");
+    const latestValue = bodyValue(doc.body, "latest_value");
+    return [
+      {
+        domain: "macro",
+        fact_key: `fred-${slug(seriesId)}-${slug(latestDate || doc.id)}`,
+        title: doc.title ?? `FRED ${seriesId}: ${label}`,
+        summary: `${label} latest value is ${latestValue || "unknown"}${latestDate ? ` as of ${latestDate}` : ""}.`,
+        related_tickers: fredRelatedTickers(seriesId),
+        sentiment: 0,
+        reliability,
+      },
+    ];
+  }
+
+  if (doc.source === "dart_disclosure") {
+    const corpName = bodyValue(doc.body, "corp_name");
+    const reportName = bodyValue(doc.body, "report_name");
+    const receiptNo = bodyValue(doc.body, "receipt_no");
+    const receiptDate = bodyValue(doc.body, "receipt_date");
+    const ticker = bodyValue(doc.body, "ticker");
+    return [
+      {
+        domain: "news",
+        fact_key: `dart-${slug(receiptNo || doc.id)}`,
+        title: doc.title ?? `[DART] ${corpName || "기업"} ${reportName || "공시"}`,
+        summary: `${corpName || "기업"} filed ${reportName || "a disclosure"}${receiptDate ? ` on ${receiptDate}` : ""}.`,
+        related_tickers: ticker ? [ticker] : [],
+        sentiment: 0,
+        reliability,
+      },
+    ];
+  }
+
+  if (doc.source === "ticker_research") {
+    const ticker = bodyValue(doc.body, "ticker");
+    const label = bodyValue(doc.body, "company_or_asset") || ticker;
+    return [
+      {
+        domain: "news",
+        fact_key: `ticker-research-${slug(ticker || "unknown")}-${slug(doc.title ?? doc.id)}`,
+        title: doc.title ?? `${label} related update`,
+        summary: `Collected ticker research item for ${label || ticker || "watchlist ticker"}.`,
+        related_tickers: ticker ? [ticker] : [],
+        sentiment: 0,
+        reliability,
+      },
+    ];
+  }
+
+  return [];
+}
+
+async function writeExtractedFacts(
+  doc: { id: string; source: string },
+  facts: ExtractedFact[],
+  promptVersion: RefinerPromptProfile,
+) {
+  for (const f of facts) {
+    const { data: existing } = await supabaseAdmin
+      .from("kb_facts")
+      .select("id, source_doc_ids")
+      .eq("fact_key", f.fact_key)
+      .maybeSingle();
+
+    if (existing) {
+      const ex = existing as unknown as { id: string; source_doc_ids: string[] | null };
+      const merged = Array.from(new Set([...(ex.source_doc_ids ?? []), doc.id]));
+      await (supabaseAdmin.from("kb_facts") as any)
+        .update({
+          title: f.title,
+          summary: f.summary,
+          related_tickers: f.related_tickers,
+          sentiment: f.sentiment,
+          reliability: f.reliability,
+          source_doc_ids: merged,
+          updated_at: new Date().toISOString(),
+          pipeline_version: promptVersion,
+          is_active: true,
+        })
+        .eq("id", ex.id);
+    } else {
+      await (supabaseAdmin.from("kb_facts") as any).insert({
+        domain: f.domain,
+        fact_key: f.fact_key,
+        title: f.title,
+        summary: f.summary,
+        related_tickers: f.related_tickers,
+        sentiment: f.sentiment,
+        reliability: f.reliability,
+        source_doc_ids: [doc.id],
+        pipeline_version: promptVersion,
+        is_active: true,
+      });
+    }
+  }
+}
+
 const REFINER_SYSTEM = `너는 한국 주식 투자용 지식베이스 정제 에이전트다.
 입력된 원본 문서에서 투자 의사결정에 유의미한 facts만 추출해서 JSON으로 반환한다.
 
@@ -979,7 +1128,15 @@ ${(d.body ?? "").slice(0, 6000)}
   try {
     raw = await callAiGateway(REFINER_SYSTEM, userPrompt);
   } catch (err: unknown) {
-    return { ok: false, facts: 0, error: (err as Error).message };
+    const fallbackFacts = fallbackFactsForStructuredSource(d);
+    if (fallbackFacts.length === 0) {
+      return { ok: false, facts: 0, error: (err as Error).message };
+    }
+    await writeExtractedFacts(d, fallbackFacts, promptVersion);
+    await (supabaseAdmin.from("raw_documents") as any)
+      .update({ processed_at: new Date().toISOString() })
+      .eq("id", d.id);
+    return { ok: true, facts: fallbackFacts.length, error: `fallback_refiner: ${(err as Error).message}` };
   }
 
   let parsedFacts: ExtractedFact[];
@@ -989,53 +1146,7 @@ ${(d.body ?? "").slice(0, 6000)}
     return { ok: false, facts: 0, error: "AI 응답 JSON 스키마/파싱 실패" };
   }
 
-  for (const f of parsedFacts) {
-    // upsert by fact_key
-    const { data: existing } = await supabaseAdmin
-      .from("kb_facts")
-      .select("id, source_doc_ids")
-      .eq("fact_key", f.fact_key)
-      .maybeSingle();
-
-    if (existing) {
-      const ex = existing as unknown as { id: string; source_doc_ids: string[] | null };
-      const merged = Array.from(new Set([...(ex.source_doc_ids ?? []), d.id]));
-      try {
-        await (supabaseAdmin.from("kb_facts") as any)
-          .update({
-            title: f.title,
-            summary: f.summary,
-            related_tickers: f.related_tickers,
-            sentiment: f.sentiment,
-            reliability: f.reliability,
-            source_doc_ids: merged,
-            updated_at: new Date().toISOString(),
-            pipeline_version: promptVersion,
-            is_active: true,
-          })
-          .eq("id", ex.id);
-      } catch (err) {
-        console.error("[collector:refine] update existing fact error", err);
-      }
-    } else {
-      try {
-        await supabaseAdmin.from("kb_facts").insert({
-          domain: f.domain,
-          fact_key: f.fact_key,
-          title: f.title,
-          summary: f.summary,
-          related_tickers: f.related_tickers,
-          sentiment: f.sentiment,
-          reliability: f.reliability,
-          source_doc_ids: [d.id],
-          pipeline_version: promptVersion,
-          is_active: true,
-        });
-      } catch (err) {
-        console.error("[collector:refine] insert fact error", err);
-      }
-    }
-  }
+  await writeExtractedFacts(d, parsedFacts, promptVersion);
 
   await (supabaseAdmin.from("raw_documents") as any)
     .update({ processed_at: new Date().toISOString() })
