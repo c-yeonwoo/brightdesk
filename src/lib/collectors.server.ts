@@ -369,14 +369,7 @@ function createNaverNewsCollector(): CollectorStrategy {
               source: "naver_news",
               external_id: link.url,
               title: article.title || link.title,
-              body: [
-                body,
-                "",
-                `naver_section=${section.key}`,
-                `naver_section_label=${section.label}`,
-                `source_url=${link.url}`,
-                "research_context=Naver breaking news. Treat as market attention signal, not official disclosure. Extract sector, macro, fund-flow, and listed-company implications.",
-              ].join("\n"),
+              body,
               published_at: article.published,
               reliability,
               meta: {
