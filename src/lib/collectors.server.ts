@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export type SourceType = string;
 
-type CollectorKind = "rss";
+type CollectorKind = "rss" | "api";
 type RefinerPromptProfile = "kb-facts-v1" | "kb-facts-v2";
 
 export interface RawDocCandidate {
@@ -309,6 +309,107 @@ function createTickerResearchCollector(ticker: string, label?: string | null): C
   };
 }
 
+const DEFAULT_FRED_SERIES = [
+  "FEDFUNDS",
+  "DGS10",
+  "DGS2",
+  "CPIAUCSL",
+  "UNRATE",
+  "DCOILWTICO",
+  "DTWEXBGS",
+];
+
+const FRED_SERIES_LABELS: Record<string, string> = {
+  FEDFUNDS: "Effective Federal Funds Rate",
+  DGS10: "10-Year Treasury Constant Maturity Rate",
+  DGS2: "2-Year Treasury Constant Maturity Rate",
+  CPIAUCSL: "Consumer Price Index for All Urban Consumers",
+  UNRATE: "Unemployment Rate",
+  DCOILWTICO: "WTI Crude Oil Price",
+  DTWEXBGS: "Trade Weighted U.S. Dollar Index",
+};
+
+function getFredSeriesIds() {
+  return (process.env.BRIGHTDESK_FRED_SERIES_IDS ?? DEFAULT_FRED_SERIES.join(","))
+    .split(",")
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean)
+    .slice(0, toInt(process.env.BRIGHTDESK_FRED_SERIES_LIMIT, 12));
+}
+
+function latestValidFredObservations(observations: Array<{ date?: string; value?: string }>, limit: number) {
+  return observations
+    .filter((row) => row.date && row.value && row.value !== ".")
+    .slice(-limit);
+}
+
+function createFredCollector(): CollectorStrategy {
+  return {
+    source: "fred_api",
+    isEnabled: () => Boolean(process.env.FRED_API_KEY || process.env.BRIGHTDESK_FRED_API_KEY),
+    async fetch() {
+      const apiKey = process.env.FRED_API_KEY || process.env.BRIGHTDESK_FRED_API_KEY;
+      if (!apiKey) return [];
+
+      const observationLimit = toInt(process.env.BRIGHTDESK_FRED_OBSERVATION_LIMIT, 12);
+      const docs: RawDocCandidate[] = [];
+
+      for (const seriesId of getFredSeriesIds()) {
+        const url = new URL("https://api.stlouisfed.org/fred/series/observations");
+        url.searchParams.set("series_id", seriesId);
+        url.searchParams.set("api_key", apiKey);
+        url.searchParams.set("file_type", "json");
+        url.searchParams.set("sort_order", "asc");
+        url.searchParams.set("limit", "120");
+
+        const res = await fetch(url, {
+          headers: { "User-Agent": "BrightDesk-FRED-Collector/1.0" },
+        });
+        if (!res.ok) {
+          throw new Error(`fred_api ${seriesId} request failed: ${res.status} ${res.statusText}`);
+        }
+
+        const json = (await res.json()) as { observations?: Array<{ date?: string; value?: string }> };
+        const rows = latestValidFredObservations(json.observations ?? [], observationLimit);
+        if (rows.length === 0) continue;
+
+        const latest = rows[rows.length - 1];
+        const label = FRED_SERIES_LABELS[seriesId] ?? seriesId;
+        const body = [
+          `source=fred-api`,
+          `series_id=${seriesId}`,
+          `series_label=${label}`,
+          `latest_date=${latest.date}`,
+          `latest_value=${latest.value}`,
+          "",
+          "recent_observations:",
+          ...rows.map((row) => `- ${row.date}: ${row.value}`),
+          "",
+          "research_context=Official FRED macroeconomic time series. Extract facts about rates, inflation, labor, oil, dollar liquidity, and market regime implications.",
+        ].join("\n");
+
+        docs.push({
+          source: "fred_api",
+          external_id: `fred-${seriesId}-${latest.date}`,
+          title: `FRED ${seriesId}: ${label} latest ${latest.value} on ${latest.date}`,
+          body,
+          published_at: normalizeDate(latest.date),
+          reliability: 0.9,
+          meta: {
+            series_id: seriesId,
+            series_label: label,
+            latest_date: latest.date,
+            latest_value: latest.value,
+            source_url: `https://fred.stlouisfed.org/series/${seriesId}`,
+          },
+        });
+      }
+
+      return docs;
+    },
+  };
+}
+
 const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
   {
     displayName: "Federal Reserve RSS",
@@ -385,15 +486,26 @@ const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
 export const collectors: CollectorStrategy[] = buildCollectors(DEFAULT_COLLECTOR_CONFIGS, rssCollectorFactory);
 
 export function getCollectorProfiles(): SourceProfile[] {
-  return DEFAULT_COLLECTOR_CONFIGS.map((cfg) => ({
-    source: cfg.source,
-    displayName: cfg.displayName,
-    kind: cfg.kind,
-    enabled: Boolean(process.env[cfg.feedEnvKey]),
-    reliability: cfg.reliability,
-    limit: toInt(process.env[`${cfg.feedEnvKey}_LIMIT`], cfg.limit),
-    parserVersion: cfg.parserVersion ?? "kb-facts-v1",
-  }));
+  return [
+    ...DEFAULT_COLLECTOR_CONFIGS.map((cfg) => ({
+      source: cfg.source,
+      displayName: cfg.displayName,
+      kind: cfg.kind,
+      enabled: Boolean(process.env[cfg.feedEnvKey]),
+      reliability: cfg.reliability,
+      limit: toInt(process.env[`${cfg.feedEnvKey}_LIMIT`], cfg.limit),
+      parserVersion: cfg.parserVersion ?? "kb-facts-v1",
+    })),
+    {
+      source: "fred_api",
+      displayName: "FRED API",
+      kind: "api" as const,
+      enabled: Boolean(process.env.FRED_API_KEY || process.env.BRIGHTDESK_FRED_API_KEY),
+      reliability: 0.9,
+      limit: getFredSeriesIds().length,
+      parserVersion: "kb-facts-v1" as const,
+    },
+  ];
 }
 
 function getCollectorProfile(source: string) {
@@ -407,6 +519,9 @@ function getCollectorProfile(source: string) {
       limit: toInt(process.env.BRIGHTDESK_TICKER_RESEARCH_RSS_LIMIT, 5),
       parserVersion: "kb-facts-v1" as const,
     };
+  }
+  if (source === "fred_api") {
+    return getCollectorProfiles().find((item) => item.source === "fred_api");
   }
   return getCollectorProfiles().find((item) => item.source === source);
 }
@@ -527,6 +642,7 @@ export async function runCollection(params?: {
 
   const targetCollectors = params?.collectors ?? [
     ...collectors,
+    createFredCollector(),
     ...((params?.includeTickerResearch ?? true) ? await buildTickerResearchCollectors() : []),
   ];
   const active = targetCollectors.filter((c) => c.isEnabled());
