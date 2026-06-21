@@ -224,6 +224,181 @@ class RssCollectorStrategy implements CollectorStrategy {
   }
 }
 
+type NaverNewsSection = {
+  key: string;
+  label: string;
+  url: string;
+  reliability: number;
+};
+
+const DEFAULT_NAVER_NEWS_SECTIONS: NaverNewsSection[] = [
+  {
+    key: "finance",
+    label: "금융",
+    url: "https://news.naver.com/breakingnews/section/101/259",
+    reliability: 0.58,
+  },
+  {
+    key: "stock",
+    label: "증권",
+    url: "https://news.naver.com/breakingnews/section/101/258",
+    reliability: 0.58,
+  },
+  {
+    key: "industry",
+    label: "산업/재계",
+    url: "https://news.naver.com/breakingnews/section/101/261",
+    reliability: 0.56,
+  },
+];
+
+function parseNaverSectionsFromEnv() {
+  const raw = process.env.BRIGHTDESK_NAVER_NEWS_SECTIONS_JSON;
+  if (!raw) return DEFAULT_NAVER_NEWS_SECTIONS;
+  try {
+    const parsed = JSON.parse(raw) as Partial<NaverNewsSection>[];
+    const rows = parsed
+      .map((item, index) => ({
+        key: String(item.key ?? `section-${index + 1}`),
+        label: String(item.label ?? item.key ?? `section-${index + 1}`),
+        url: String(item.url ?? ""),
+        reliability: clamp01(Number(item.reliability ?? 0.56), 0.56),
+      }))
+      .filter((item) => item.url.startsWith("https://news.naver.com/"));
+    return rows.length > 0 ? rows : DEFAULT_NAVER_NEWS_SECTIONS;
+  } catch {
+    return DEFAULT_NAVER_NEWS_SECTIONS;
+  }
+}
+
+function decodeHtmlEntities(value: string) {
+  return safeText(
+    value
+      .replace(/&quot;/gi, '"')
+      .replace(/&#034;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&#039;/gi, "'")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">"),
+  );
+}
+
+async function fetchHtml(url: string, source: SourceType): Promise<string> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 12_000);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; BrightDesk-NaverNews/1.0)",
+        Accept: "text/html,application/xhtml+xml,*/*",
+      },
+      signal: ac.signal,
+    });
+    if (!res.ok) throw new Error(`${source} html request failed: ${res.status} ${res.statusText}`);
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseNaverArticleLinks(sectionHtml: string, section: NaverNewsSection, limit: number) {
+  const links: { title: string; url: string }[] = [];
+  const seen = new Set<string>();
+  const re = /<a\b[^>]*href=["'](https:\/\/n\.news\.naver\.com\/mnews\/article\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  for (const match of sectionHtml.matchAll(re)) {
+    const url = match[1].replace(/&amp;/g, "&").split("?")[0];
+    const title = decodeHtmlEntities(match[2]);
+    if (!title || title.length < 4 || seen.has(url)) continue;
+    seen.add(url);
+    links.push({ title, url });
+    if (links.length >= limit) break;
+  }
+
+  return links.map((item) => ({ ...item, title: `[네이버 ${section.label}] ${item.title}` }));
+}
+
+function parseNaverArticle(html: string, fallbackTitle: string) {
+  const title =
+    decodeHtmlEntities(html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i)?.[1] ?? "") ||
+    fallbackTitle;
+  const publishedRaw =
+    html.match(/<span[^>]*class=["'][^"']*media_end_head_info_datestamp_time[^"']*["'][^>]*data-date-time=["']([^"']+)["']/i)?.[1] ??
+    html.match(/<span[^>]*class=["'][^"']*media_end_head_info_datestamp_time[^"']*["'][^>]*>([\s\S]*?)<\/span>/i)?.[1];
+  const bodyRaw =
+    html.match(/<article[^>]*id=["']dic_area["'][^>]*>([\s\S]*?)<\/article>/i)?.[1] ??
+    html.match(/<div[^>]*id=["']dic_area["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] ??
+    html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i)?.[1] ??
+    "";
+  const body = decodeHtmlEntities(bodyRaw.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " "));
+  const published = publishedRaw ? normalizeDate(decodeHtmlEntities(publishedRaw)) : new Date().toISOString();
+  return { title, body, published };
+}
+
+function recencyBoostReliability(base: number, publishedAt: string) {
+  const ageHours = (Date.now() - new Date(publishedAt).getTime()) / 3_600_000;
+  if (!Number.isFinite(ageHours) || ageHours < 0) return base;
+  if (ageHours <= 3) return Math.min(0.64, base + 0.06);
+  if (ageHours <= 12) return Math.min(0.62, base + 0.04);
+  if (ageHours <= 24) return Math.min(0.6, base + 0.02);
+  return base;
+}
+
+function createNaverNewsCollector(): CollectorStrategy {
+  return {
+    source: "naver_news",
+    isEnabled() {
+      return (process.env.BRIGHTDESK_NAVER_NEWS_ENABLED ?? "true").toLowerCase() !== "false";
+    },
+    async fetch() {
+      const sections = parseNaverSectionsFromEnv();
+      const perSectionLimit = toInt(process.env.BRIGHTDESK_NAVER_NEWS_SECTION_LIMIT, 8);
+      const totalLimit = toInt(process.env.BRIGHTDESK_NAVER_NEWS_LIMIT, 24);
+      const docs: RawDocCandidate[] = [];
+
+      for (const section of sections) {
+        const sectionHtml = await fetchHtml(section.url, "naver_news");
+        const links = parseNaverArticleLinks(sectionHtml, section, perSectionLimit);
+        for (const link of links) {
+          try {
+            const articleHtml = await fetchHtml(link.url, "naver_news");
+            const article = parseNaverArticle(articleHtml, link.title);
+            const body = article.body || link.title;
+            const reliability = recencyBoostReliability(section.reliability, article.published);
+            docs.push({
+              source: "naver_news",
+              external_id: link.url,
+              title: article.title || link.title,
+              body: [
+                body,
+                "",
+                `naver_section=${section.key}`,
+                `naver_section_label=${section.label}`,
+                `source_url=${link.url}`,
+                "research_context=Naver breaking news. Treat as market attention signal, not official disclosure. Extract sector, macro, fund-flow, and listed-company implications.",
+              ].join("\n"),
+              published_at: article.published,
+              reliability,
+              meta: {
+                source_url: link.url,
+                section: section.key,
+                section_label: section.label,
+                list_url: section.url,
+                recency_weighted: true,
+              },
+            });
+            if (docs.length >= totalLimit) return docs;
+          } catch (error) {
+            console.error("[collector:naver_news:article]", error);
+          }
+        }
+      }
+
+      return docs;
+    },
+  };
+}
+
 export function createRssCollector(cfg: CollectorConfig): CollectorStrategy {
   return new RssCollectorStrategy(cfg);
 }
@@ -602,7 +777,10 @@ const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
   },
 ];
 
-export const collectors: CollectorStrategy[] = buildCollectors(DEFAULT_COLLECTOR_CONFIGS, rssCollectorFactory);
+export const collectors: CollectorStrategy[] = [
+  ...buildCollectors(DEFAULT_COLLECTOR_CONFIGS, rssCollectorFactory),
+  createNaverNewsCollector(),
+];
 
 export function getCollectorProfiles(): SourceProfile[] {
   return [
@@ -633,6 +811,15 @@ export function getCollectorProfiles(): SourceProfile[] {
       limit: toInt(process.env.BRIGHTDESK_DART_LIMIT, 40),
       parserVersion: "kb-facts-v1" as const,
     },
+    {
+      source: "naver_news",
+      displayName: "네이버 뉴스",
+      kind: "rss" as const,
+      enabled: (process.env.BRIGHTDESK_NAVER_NEWS_ENABLED ?? "true").toLowerCase() !== "false",
+      reliability: 0.58,
+      limit: toInt(process.env.BRIGHTDESK_NAVER_NEWS_LIMIT, 24),
+      parserVersion: "kb-facts-v1" as const,
+    },
   ];
 }
 
@@ -653,6 +840,9 @@ function getCollectorProfile(source: string) {
   }
   if (source === "dart_disclosure") {
     return getCollectorProfiles().find((item) => item.source === "dart_disclosure");
+  }
+  if (source === "naver_news") {
+    return getCollectorProfiles().find((item) => item.source === "naver_news");
   }
   return getCollectorProfiles().find((item) => item.source === source);
 }

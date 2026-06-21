@@ -12,6 +12,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   mijueun_youtube: "미주은 유튜브",
   snoomi_kakao: "스누미 카톡",
   news: "뉴스",
+  naver_news: "네이버 뉴스",
   manual_upload: "수동 업로드",
 };
 

@@ -120,3 +120,25 @@ Sector heat는 최근 30일 기준으로 아래 신호를 합산한다.
 - 핵심 signal reason
 
 Dashboard trade ledger는 거래별 signal과 `signal_outcomes`를 함께 보여줄 수 있도록 payload를 확장했다.
+
+### Naver news collector
+
+Naver breaking news is collected as a market-attention source, not as official disclosure.
+
+Default sections:
+
+- 금융: `https://news.naver.com/breakingnews/section/101/259`
+- 증권: `https://news.naver.com/breakingnews/section/101/258`
+- 산업/재계: `https://news.naver.com/breakingnews/section/101/261`
+
+Reliability policy:
+
+- Base reliability is roughly `0.56 ~ 0.58`.
+- Articles published within the last 3 hours are boosted up to `0.64`.
+- Articles within 12 hours are boosted up to `0.62`.
+- The source is useful for detecting what the market is currently paying attention to, but portfolio actions should still be confirmed against prices, filings, macro data, and signal outcomes.
+
+Cron behavior:
+
+- Included in the normal hourly collection path.
+- Dedupe uses article URL/content hash, so repeated hourly runs only add newly discovered articles.
