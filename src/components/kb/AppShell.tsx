@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Briefcase, Database, Sparkles } from "lucide-react";
+import { Activity, Briefcase, Database, Layers3, Sparkles } from "lucide-react";
 import brightdeskLogo from "@/assets/brightdesk-logo.png";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ const nav = [
   { to: "/", label: "대시보드", icon: Activity },
   { to: "/my-portfolio", label: "포트폴리오", icon: Briefcase },
   { to: "/insights", label: "인사이트", icon: Sparkles },
+  { to: "/pipeline", label: "데이터 상태", icon: Layers3 },
   { to: "/data", label: "데이터", icon: Database },
 ];
 
@@ -93,7 +94,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <ul className={`mx-auto grid max-w-[1400px] ${visibleNav.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}>
+        <ul
+          className="mx-auto grid max-w-[1400px]"
+          style={{ gridTemplateColumns: `repeat(${visibleNav.length}, minmax(0, 1fr))` }}
+        >
           {visibleNav.map((n) => {
             const active = path === n.to || (n.to !== "/" && path.startsWith(n.to));
             const Icon = n.icon;
