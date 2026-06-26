@@ -536,6 +536,7 @@ export const getDocumentBody = createServerFn({ method: "GET" })
 
 export const listTickerSuggestions = createServerFn({ method: "GET" }).handler(async () => {
   const { getKbClient } = await import("./kb-client.server");
+  const { getDefaultResearchTickers, getMonitoringUniverse } = await import("./monitoring-universe.server");
   const sb = getKbClient();
   const { data, error } = await sb
     .from("kb_facts")
@@ -549,9 +550,22 @@ export const listTickerSuggestions = createServerFn({ method: "GET" }).handler(a
       counts.set(t, (counts.get(t) ?? 0) + 1);
     }
   }
+  const priority = new Map<string, number>();
+  const seedTickers = [...getDefaultResearchTickers(), ...getMonitoringUniverse()];
+  seedTickers.forEach((ticker, index) => {
+    const normalized = ticker.toUpperCase();
+    if (!counts.has(normalized)) counts.set(normalized, 0);
+    if (!priority.has(normalized)) priority.set(normalized, index);
+  });
   return Array.from(counts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 50)
+    .sort((a, b) => {
+      const countDiff = b[1] - a[1];
+      if (countDiff !== 0) return countDiff;
+      const priorityDiff = (priority.get(a[0]) ?? 999_999) - (priority.get(b[0]) ?? 999_999);
+      if (priorityDiff !== 0) return priorityDiff;
+      return a[0].localeCompare(b[0]);
+    })
+    .slice(0, 500)
     .map(([ticker, count]) => ({ ticker, count }));
 });
 
