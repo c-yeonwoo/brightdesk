@@ -104,6 +104,9 @@ export async function executeSignal(opts: {
 }) {
   const { portfolioId, ticker, kind, signalDate, signalId, note } = opts;
   if (kind === "HOLD") return { skipped: "HOLD" };
+  if (!signalId) {
+    return { skipped: "signal_required", reason: "BUY/SELL requires a linked signal_id" };
+  }
 
 
   const dateOnly = signalDate.slice(0, 10);
@@ -283,63 +286,15 @@ export async function applyAllRecentSignals(
 }
 
 export async function applyStarterPaperAllocation(
-  portfolioId: string,
-  opts: { blockBuys?: boolean; maxPositions?: number; allocationKrw?: number } = {},
+  _portfolioId: string,
+  _opts: { blockBuys?: boolean; maxPositions?: number; allocationKrw?: number } = {},
 ) {
-  if (opts.blockBuys) {
-    return { applied: 0, skipped: 1, reason: "regime_block_buy", results: [] };
-  }
-
-  const sb = supabaseAdmin;
-  const { data: pf } = await sb.from("portfolios").select("*").eq("id", portfolioId).single();
-  if (!pf) throw new Error("portfolio not found");
-
-  const { data: positions } = await sb
-    .from("positions")
-    .select("ticker,qty")
-    .eq("portfolio_id", portfolioId)
-    .gt("qty", 0);
-  if ((positions ?? []).length > 0) {
-    return { applied: 0, skipped: 1, reason: "already_in_market", results: [] };
-  }
-
-  const cash = Number(pf.cash ?? 0);
-  if (cash < 500_000) {
-    return { applied: 0, skipped: 1, reason: "insufficient_cash", results: [] };
-  }
-
-  const tickers = (process.env.BRIGHTDESK_PAPER_STARTER_TICKERS ?? "SPY,QQQ,SMH,TLT")
-    .split(",")
-    .map((ticker) => ticker.trim().toUpperCase())
-    .filter(Boolean)
-    .slice(0, opts.maxPositions ?? 4);
-  const targetDeployRatio = Math.max(0.05, Math.min(0.8, Number(process.env.BRIGHTDESK_PAPER_STARTER_DEPLOY_RATIO ?? 0.45)));
-  const targetDeployKrw = cash * targetDeployRatio;
-  const baseAllocationKrw =
-    opts.allocationKrw ??
-    Math.max(500_000, Math.min(2_000_000, targetDeployKrw / Math.max(1, tickers.length)));
-  const results: any[] = [];
-
-  for (const ticker of tickers) {
-    const latestPriceKrw = await getLatestPriceKrw(ticker);
-    const allocationKrw = latestPriceKrw
-      ? Math.min(cash, Math.max(baseAllocationKrw, latestPriceKrw * 1.01))
-      : baseAllocationKrw;
-    const r = await executeSignal({
-      portfolioId,
-      ticker,
-      kind: "BUY",
-      signalDate: new Date().toISOString(),
-      allocationKrw,
-      note: "starter_paper_allocation",
-    });
-    results.push({ ticker, kind: "BUY", ...r });
-  }
-
   return {
-    applied: results.filter((r) => !r.skipped).length,
-    skipped: results.filter((r) => r.skipped).length,
-    results,
+    applied: 0,
+    skipped: 1,
+    reason: "disabled_signal_required",
+    results: [],
+    note: "Starter allocation is disabled because every BUY/SELL must be linked to a signal.",
   };
 }
 

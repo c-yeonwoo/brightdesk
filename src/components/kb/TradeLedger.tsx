@@ -298,7 +298,7 @@ export function TradeLedger({ trades }: { trades: Trade[] }) {
                     </div>
                   ) : (
                     <p className="text-xs text-warning">
-                      이 거래는 시그널 근거 없이 기록되었습니다. 시스템 무결성 점검이 필요합니다.
+                      이 거래는 과거 정책에서 생성된 시그널 누락 거래입니다. 현재는 signal_id 없는 매수/매도가 차단됩니다.
                     </p>
                   )}
                 </div>

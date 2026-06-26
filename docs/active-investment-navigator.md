@@ -142,3 +142,16 @@ Cron behavior:
 
 - Included in the normal hourly collection path.
 - Dedupe uses article URL/content hash, so repeated hourly runs only add newly discovered articles.
+
+
+## Signal-linked trading guard
+
+Every paper portfolio BUY/SELL must be linked to a row in `signals`.
+
+- `executeSignal` rejects BUY/SELL when `signalId` is missing.
+- Starter allocation is disabled because it can create trades without explicit signal evidence.
+- Risk exits must also be represented by a signal before execution.
+
+## Scheduled collection
+
+Vercel Cron calls `GET /api/public/cron/collect` every hour via `vercel.json`. This endpoint runs collection, ticker research, and KB refinement. The route remains protected by `CRON_SECRET` / Bearer authorization.

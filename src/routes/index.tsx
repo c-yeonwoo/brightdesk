@@ -565,7 +565,7 @@ function PaperPortfolioDetail({ liveDashboard, expert = false }: { liveDashboard
 
         {positions.length === 0 ? (
           <div className="rounded-2xl border bg-background p-5 text-sm text-muted-foreground">
-            아직 보유 종목이 없습니다. 백필 후 hourly cron이 starter allocation 또는 신뢰도 높은 시그널을 만나면 구성이 생깁니다.
+            아직 보유 종목이 없습니다. 백필 후 hourly cron이 신뢰도 높은 BUY/SELL 시그널을 만나면 구성이 생깁니다.
           </div>
         ) : (
           <div className="space-y-2">

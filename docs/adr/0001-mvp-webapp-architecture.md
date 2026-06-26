@@ -18,7 +18,7 @@ Use Vercel + Supabase as the MVP deployment architecture.
 - Supabase provides Postgres, Auth, RLS, and service-role server access.
 - Cron endpoints remain protected by `CRON_SECRET`.
 - Scheduled execution should be called by a scheduler that can send `X-CRON-SECRET` or `Authorization: Bearer <token>`.
-- Vercel Cron is not the primary scheduler for protected jobs because it does not fit the current secret-header execution contract.
+- Vercel Cron is used for hourly collection via `GET /api/public/cron/collect`; `CRON_SECRET` Bearer authorization protects the endpoint.
 - LLM calls use OpenAI-compatible environment variables: `AI_API_KEY`, `AI_MODEL`, `AI_VISION_MODEL`, `AI_GATEWAY_URL`.
 - User-provided text, PDF, and image inputs enter the system as `raw_documents` with `source = manual_upload`.
 - KB facts remain the unified downstream format regardless of source.
