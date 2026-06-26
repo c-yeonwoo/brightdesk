@@ -12,11 +12,11 @@ import {
 } from "@/lib/pipeline.functions";
 import { formatSourceLabel, relativeTime } from "@/lib/kb-format";
 import type { KbDomain } from "@/lib/kb-client.server";
-import { requireClientAdmin } from "@/lib/access-control";
+import { isCurrentUserAdmin, requireClientUser } from "@/lib/access-control";
 
 export const Route = createFileRoute("/pipeline")({
   beforeLoad: async () => {
-    await requireClientAdmin();
+    await requireClientUser();
   },
   head: () => ({
     meta: [
@@ -40,6 +40,12 @@ function PipelinePage() {
   const collect = useServerFn(triggerCollection);
   const refine = useServerFn(triggerRefiner);
   const status = useServerFn(getPipelineStatus);
+
+  const { data: isAdmin = false } = useQuery({
+    queryKey: ["current-user-admin"],
+    queryFn: () => isCurrentUserAdmin(),
+    staleTime: 60 * 1000,
+  });
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["pipeline-status"],
@@ -236,7 +242,7 @@ function PipelinePage() {
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         <button
           onClick={() => collectMut.mutate()}
-          disabled={collectMut.isPending}
+          disabled={!isAdmin || collectMut.isPending}
           className="rounded-xl border bg-card p-5 text-left transition-colors hover:bg-muted disabled:opacity-60"
         >
           <div className="flex items-center justify-between">
@@ -248,6 +254,11 @@ function PipelinePage() {
             )}
           </div>
           <div className="mt-2 text-sm font-medium">4개 소스 collectors 즉시 실행</div>
+          {!isAdmin && (
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              수동 실행은 어드민 계정에서만 가능합니다.
+            </div>
+          )}
           {collectMut.data && (
             <div className="mt-2 text-[11px] text-muted-foreground tabular-nums">
               수집 {collectMut.data.collected} · 신규 {collectMut.data.inserted} · 중복{" "}
@@ -263,7 +274,7 @@ function PipelinePage() {
 
         <button
           onClick={() => refineMut.mutate()}
-          disabled={refineMut.isPending}
+          disabled={!isAdmin || refineMut.isPending}
           className={`rounded-xl border bg-card p-5 text-left transition-colors hover:bg-muted disabled:opacity-60 ${mode === "user" ? "hidden" : ""}`}
         >
           <div className="flex items-center justify-between">
@@ -275,6 +286,11 @@ function PipelinePage() {
             )}
           </div>
           <div className="mt-2 text-sm font-medium">미처리 큐 → kb_facts upsert</div>
+          {!isAdmin && (
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              수동 정제는 어드민 계정에서만 가능합니다.
+            </div>
+          )}
           {refineMut.data && (
             <div className="mt-2 text-[11px] text-muted-foreground tabular-nums">
               처리 {refineMut.data.processed} · facts {refineMut.data.factsCreated}
