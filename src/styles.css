@@ -45,36 +45,36 @@
   --color-domain-politics: var(--domain-politics);
 
   --font-sans:
-    "Inter", "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    "IBM Plex Sans KR", "SUIT", "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 :root {
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
-  /* Fintech light theme — cool slate + indigo accent */
-  --background: oklch(0.99 0.003 240);
-  --foreground: oklch(0.22 0.03 250);
+  /* Investment desk theme — warm paper + slate ink */
+  --background: oklch(0.985 0.006 92);
+  --foreground: oklch(0.2 0.025 250);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.22 0.03 250);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.22 0.03 250);
 
-  --primary: oklch(0.52 0.18 265);
-  --primary-foreground: oklch(0.99 0.003 240);
-  --secondary: oklch(0.965 0.01 250);
+  --primary: oklch(0.43 0.11 230);
+  --primary-foreground: oklch(0.99 0.006 92);
+  --secondary: oklch(0.958 0.012 92);
   --secondary-foreground: oklch(0.28 0.04 260);
   --muted: oklch(0.965 0.008 250);
   --muted-foreground: oklch(0.5 0.025 255);
-  --accent: oklch(0.955 0.025 260);
+  --accent: oklch(0.95 0.025 85);
   --accent-foreground: oklch(0.28 0.04 260);
 
   --destructive: oklch(0.6 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
 
-  --border: oklch(0.92 0.012 250);
-  --input: oklch(0.92 0.012 250);
-  --ring: oklch(0.52 0.18 265);
+  --border: oklch(0.9 0.014 92);
+  --input: oklch(0.9 0.014 92);
+  --ring: oklch(0.43 0.11 230);
 
   --success: oklch(0.66 0.16 150);
   --warning: oklch(0.78 0.16 75);

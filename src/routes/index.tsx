@@ -66,6 +66,11 @@ function signed(n: number) {
   return n > 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
 }
 
+function krw(n: number) {
+  if (!Number.isFinite(n)) return "대기";
+  return `${Math.round(n).toLocaleString("ko-KR")}원`;
+}
+
 function MarketPulsePage() {
   const { data, isLoading } = useQuery({
     queryKey: ["market-desk"],
@@ -94,11 +99,11 @@ function MarketPulsePage() {
               <span className="ml-1 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">샘플</span>
             )}
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            오늘 시장을 읽고, 다음 후보를 고릅니다
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            오늘의 투자 판단판
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            시장 흐름, 추천 후보, 포트폴리오 반영 방향을 한 번에 확인합니다.
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            시장 국면, 돈이 몰리는 섹터, 실증 포트폴리오 액션을 한 화면에서 봅니다.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -157,6 +162,8 @@ function MarketPulseContent({ data, history, liveDashboard }: { data: any; histo
 
   return (
     <div className="space-y-6">
+      <DeskCommandCenter data={data} liveDashboard={liveDashboard} />
+
       <section className="overflow-hidden rounded-2xl border bg-card">
         <div className="relative grid gap-0 lg:grid-cols-[1.35fr_0.65fr]">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.16),transparent_34%),radial-gradient(circle_at_top_right,rgba(14,165,233,0.14),transparent_30%)]" />
@@ -213,7 +220,7 @@ function MarketPulseContent({ data, history, liveDashboard }: { data: any; histo
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
                 <Activity className="h-4 w-4" />
-                전문가 액션 보드
+                다음 액션
               </h2>
               <span className="rounded-md border bg-card px-2 py-1 text-[11px] text-muted-foreground">상세</span>
             </div>
@@ -224,7 +231,7 @@ function MarketPulseContent({ data, history, liveDashboard }: { data: any; histo
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] text-primary-foreground">
                       {index + 1}
                     </span>
-                    우선순위 {index + 1}
+                    Priority {index + 1}
                   </div>
                   <p className="text-xs leading-5 text-muted-foreground">{action}</p>
                 </div>
@@ -380,16 +387,18 @@ function EasyMarketPulseContent({ data, history, liveDashboard }: { data: any; h
 
   return (
     <div className="space-y-5">
+      <DeskCommandCenter data={data} liveDashboard={liveDashboard} easy />
+
       <section className="overflow-hidden rounded-3xl border bg-card">
         <div className="relative p-5 sm:p-8">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(34,197,94,0.18),transparent_34%),radial-gradient(circle_at_90%_15%,rgba(251,191,36,0.16),transparent_30%)]" />
           <div className="relative">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border bg-background/80 px-3 py-1 text-xs font-semibold">
               <Trend className="h-4 w-4" />
-              요약
+              쉬운 요약
             </div>
             <h2 className="max-w-4xl text-3xl font-semibold tracking-tight sm:text-4xl">
-              지금은 <span className="text-primary">{data.market_read?.posture ?? data.brief.regime_label}</span> 장세입니다
+              지금은 <span className="text-primary">{data.market_read?.posture ?? data.brief.regime_label}</span>
             </h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
               {data.market_read?.action_bias ?? data.brief.summary}
@@ -488,46 +497,199 @@ function EasyMarketPulseContent({ data, history, liveDashboard }: { data: any; h
   );
 }
 
+function DeskCommandCenter({ data, liveDashboard, easy = false }: { data: any; liveDashboard?: any; easy?: boolean }) {
+  const topPick = (data.opportunities ?? [])[0];
+  const confidence = Number(data.market_read?.confidence ?? 0.35);
+  const facts = Number(data.health?.facts ?? 0);
+  const signals = Number(data.health?.signals ?? 0);
+  const dataDepth = data.market_read?.data_depth ?? (facts + signals > 20 ? "보통" : "얇음");
+  const paper = data.paper_portfolio ?? {};
+  const weekly = liveDashboard?.weekly_summary ?? {};
+  const returnPct = Number(paper.return_pct ?? 0);
+  const hitRate = weekly.outcomes?.hit_rate;
+  const signalPolicy = Array.isArray(liveDashboard?.trade_ledger)
+    ? liveDashboard.trade_ledger.every((trade: any) => Boolean(trade.signal))
+    : true;
+
+  return (
+    <section className="overflow-hidden rounded-[1.75rem] border bg-[linear-gradient(135deg,color-mix(in_oklab,var(--card)_92%,var(--primary)_8%),var(--card)_48%,color-mix(in_oklab,var(--card)_88%,var(--success)_12%))] shadow-sm">
+      <div className="relative grid gap-0 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(15,23,42,0.08),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(34,197,94,0.16),transparent_28%)]" />
+        <div className="relative p-5 sm:p-7">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${regimeTone[data.brief.regime as keyof typeof regimeTone]}`}>
+              {data.brief.regime_label}
+            </span>
+            <span className="rounded-full border bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+              {data.brief.trend_label}
+            </span>
+            <span className="rounded-full border bg-background/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+              확신도 {pct(confidence)}
+            </span>
+          </div>
+
+          <div className="max-w-4xl">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+              BrightDesk Decision
+            </div>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-5xl">
+              {easy ? data.market_read?.action_bias ?? data.brief.headline : data.brief.headline}
+            </h2>
+            <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground">
+              {easy
+                ? `먼저 볼 후보는 ${topPick?.symbol ?? "대기"}입니다. 데이터가 충분히 쌓이면 추천 강도와 검증률이 더 선명해집니다.`
+                : data.brief.summary}
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <QualityPillar
+              label="오늘의 후보"
+              value={topPick?.symbol ?? "대기"}
+              helper={topPick ? `${topPick.action_label} · ${topPick.sector}` : "시그널 생성 대기"}
+              tone="primary"
+            />
+            <QualityPillar
+              label="실증 수익률"
+              value={`${returnPct >= 0 ? "+" : ""}${returnPct.toFixed(2)}%`}
+              helper={`${krw(Number(paper.current_value ?? 0))} 평가`}
+              tone={returnPct >= 0 ? "success" : "danger"}
+            />
+            <QualityPillar
+              label="검증 적중률"
+              value={hitRate == null ? "대기" : pct(Number(hitRate))}
+              helper={hitRate == null ? "5거래일 평가 누적 중" : "최근 평가된 시그널 기준"}
+              tone="info"
+            />
+          </div>
+        </div>
+
+        <div className="relative border-t bg-background/55 p-5 sm:p-7 xl:border-l xl:border-t-0">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <ShieldCheck className="h-4 w-4 text-success" />
+              신뢰 체크
+            </h3>
+            <Link to="/pipeline" className="text-xs font-medium text-muted-foreground hover:text-foreground">
+              데이터 상태
+            </Link>
+          </div>
+          <div className="space-y-3">
+            <DeskCheck
+              ok={signalPolicy}
+              label="근거 없는 매매 차단"
+              detail={signalPolicy ? "BUY/SELL은 signal_id 없이는 실행되지 않습니다." : "과거 거래 중 근거 누락 항목이 있습니다."}
+            />
+            <DeskCheck
+              ok={facts >= 8 || signals >= 8}
+              label="데이터 깊이"
+              detail={`${dataDepth} · facts ${facts} / signals ${signals}`}
+            />
+            <DeskCheck
+              ok={Number(paper.trades_30d ?? 0) > 0 || Number(paper.current_value ?? 0) > 0}
+              label="실증 운용"
+              detail={`최근 거래 ${paper.trades_30d ?? 0}건 · 현금비중 ${Math.round(Number(paper.cash_weight ?? 1) * 100)}%`}
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function QualityPillar({
+  label,
+  value,
+  helper,
+  tone,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+  tone: "primary" | "success" | "danger" | "info";
+}) {
+  const color =
+    tone === "success"
+      ? "var(--success)"
+      : tone === "danger"
+        ? "var(--danger)"
+        : tone === "info"
+          ? "var(--info)"
+          : "var(--primary)";
+  return (
+    <div className="rounded-2xl border bg-background/80 p-4">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums" style={{ color }}>
+        {value}
+      </div>
+      <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
+    </div>
+  );
+}
+
+function DeskCheck({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+  return (
+    <div className="rounded-2xl border bg-card/80 p-4">
+      <div className="mb-1 flex items-center gap-2 text-sm font-semibold">
+        {ok ? <CheckCircle2 className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-warning" />}
+        {label}
+      </div>
+      <p className="text-xs leading-5 text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
 function PaperPortfolioCard({ data, expert = false }: { data: any; expert?: boolean }) {
   if (!data) return null;
   const positive = Number(data.return_pct ?? 0) >= 0;
   const excess =
     data.benchmark_return_pct == null ? null : Number(data.return_pct ?? 0) - Number(data.benchmark_return_pct);
+  const cashWeight = Number(data.cash_weight ?? 0);
 
   return (
-    <section className="rounded-3xl border bg-card p-5">
+    <section className="overflow-hidden rounded-3xl border bg-card">
+      <div className="border-b bg-[linear-gradient(90deg,color-mix(in_oklab,var(--primary)_10%,transparent),transparent)] px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+          <span className="rounded-full bg-primary px-2.5 py-1 text-primary-foreground">실증 운용</span>
+          <span className="rounded-full border bg-background px-2.5 py-1 text-muted-foreground">초기 1,000만원</span>
+          <span className="rounded-full border bg-background px-2.5 py-1 text-muted-foreground">시그널 근거 필수</span>
+          <span className="rounded-full border bg-background px-2.5 py-1 text-muted-foreground">5거래일 사후검증</span>
+        </div>
+      </div>
+      <div className="p-5">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="mb-2 inline-flex rounded-full border bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-            실증 포트폴리오
-          </div>
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <Briefcase className="h-4 w-4" />
             {data.label}
           </h2>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">실거래가 아닌 가상 운용입니다. 하루 4회 신호와 결과를 점검합니다.</p>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+            실거래가 아닌 모델 포트폴리오입니다. 매매는 신호 근거와 연결되고, 이후 성과 검증에 남습니다.
+          </p>
         </div>
         <div className="text-right">
           <div className="text-xs text-muted-foreground">현재 평가금액</div>
-          <div className="text-xl font-semibold tabular-nums">
-            {Math.round(Number(data.current_value ?? 0)).toLocaleString("ko-KR")}원
+          <div className="text-2xl font-semibold tabular-nums">{krw(Number(data.current_value ?? 0))}</div>
+          <div className={`mt-1 text-xs font-semibold tabular-nums ${positive ? "text-success" : "text-danger"}`}>
+            {positive ? "+" : ""}{Number(data.return_pct ?? 0).toFixed(2)}%
           </div>
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <PaperMetric label="시작금액" value={`${Math.round(Number(data.initial_value ?? 0)).toLocaleString("ko-KR")}원`} />
+        <PaperMetric label="시작금액" value={krw(Number(data.initial_value ?? 0))} />
         <PaperMetric
           label="누적수익률"
           value={`${positive ? "+" : ""}${Number(data.return_pct ?? 0).toFixed(2)}%`}
           tone={positive ? "pos" : "neg"}
         />
-        <PaperMetric label="현금비중" value={`${Math.round(Number(data.cash_weight ?? 0) * 100)}%`} />
+        <PaperMetric label="현금비중" value={`${Math.round(cashWeight * 100)}%`} />
         <PaperMetric
           label={expert ? `초과수익 vs ${data.benchmark_label}` : "시장 대비"}
           value={excess == null ? "대기" : `${excess >= 0 ? "+" : ""}${excess.toFixed(2)}%p`}
           tone={excess == null ? undefined : excess >= 0 ? "pos" : "neg"}
         />
         <PaperMetric label={expert ? "MDD" : "최대 낙폭"} value={`${Number(data.max_drawdown_pct ?? 0).toFixed(1)}%`} tone="neg" />
+      </div>
       </div>
     </section>
   );
