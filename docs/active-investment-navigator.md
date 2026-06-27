@@ -143,6 +143,17 @@ Cron behavior:
 - Included in the normal hourly collection path.
 - Dedupe uses article URL/content hash, so repeated hourly runs only add newly discovered articles.
 
+## Official RSS source baseline
+
+The hourly collection path now includes default official RSS URLs even when no custom env URL is configured.
+
+- Federal Reserve RSS: monetary policy, supervision, speeches, and official press releases.
+- SEC RSS: official SEC press releases and market structure/regulatory signals.
+- EIA RSS: energy market context through Today in Energy.
+- BLS RSS: inflation, labor, wage, productivity, and other official economic releases.
+
+Operators can override each URL with `BRIGHTDESK_*_RSS_URL`, disable a source with `BRIGHTDESK_*_RSS_URL_ENABLED=false`, or add new RSS sources with `BRIGHTDESK_EXTRA_RSS_SOURCES_JSON`.
+
 
 ## Signal-linked trading guard
 

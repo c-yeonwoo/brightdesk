@@ -8,6 +8,7 @@ MVP 원칙: 먼저 원천성이 높고 구조가 안정적인 공식 소스를 �
 | --- | --- | --- | --- | --- |
 | 미국 통화정책 | Federal Reserve RSS | FOMC, 금리, 연준 발언, 정책 뉴스 | RSS | 0.9 |
 | 미국 거시지표 | FRED / St. Louis Fed | 금리, CPI, 실업률, 장단기금리, 달러 유동성 | API/RSS | 0.9 |
+| 미국 경제지표 발표 | BLS RSS | CPI, PPI, 고용, 임금, 생산성 발표 | RSS | 0.9 |
 | 미국 기업공시 | SEC RSS / EDGAR | 10-K, 10-Q, 8-K, insider, 주요 공시 | RSS/API | 0.9 |
 | 에너지 | EIA RSS | 유가, 원유재고, 천연가스, 에너지 섹터 | RSS | 0.85 |
 | 사용자 입력 | Web URL / PDF / Text / Image | 리포트, 블로그, 뉴스, 투자 메모 | 수동 업로드 | 사용자 설정 |
@@ -34,14 +35,41 @@ MVP 원칙: 먼저 원천성이 높고 구조가 안정적인 공식 소스를 �
 ## 추천 환경변수 초안
 
 ```bash
+# 아래 공식 RSS는 코드에 기본값이 내장되어 있어 env 없이도 활성화된다.
+# 필요할 때만 URL override 또는 *_ENABLED=false 로 비활성화한다.
 BRIGHTDESK_FED_RSS_URL=https://www.federalreserve.gov/feeds/press_all.xml
 BRIGHTDESK_SEC_RSS_URL=https://www.sec.gov/news/pressreleases.rss
-BRIGHTDESK_EIA_RSS_URL=https://www.eia.gov/tools/rssfeeds/
+BRIGHTDESK_EIA_RSS_URL=https://www.eia.gov/todayinenergy/rss.php
+BRIGHTDESK_BLS_RSS_URL=https://www.bls.gov/feed/news_release_all.rss
 FRED_API_KEY=
 DART_API_KEY=
 BRIGHTDESK_NEWS_RSS_URL=
 BRIGHTDESK_BROKER_PDF_RSS_URL=
 ```
+
+## 확장 RSS 설정
+
+새 RSS는 코드 수정 없이 `BRIGHTDESK_EXTRA_RSS_SOURCES_JSON`으로 추가할 수 있다.
+
+```json
+[
+  {
+    "source": "reuters_markets",
+    "displayName": "Reuters Markets",
+    "url": "https://example.com/rss",
+    "reliability": 0.65,
+    "limit": 6,
+    "bodySuffix": "source=reuters-markets"
+  }
+]
+```
+
+운영 원칙:
+
+- 공식/원천 소스는 `0.85~0.9`.
+- 언론/해설성 소스는 `0.55~0.75`.
+- 커뮤니티/영상/블로그는 `0.35~0.6`.
+- 포트폴리오 액션은 단일 뉴스가 아니라 가격, 공시, 매크로, KB, 과거 적중률과 함께 판단한다.
 
 ## 구현 우선순위
 
@@ -58,4 +86,5 @@ BRIGHTDESK_BROKER_PDF_RSS_URL=
 - SEC structured disclosure RSS: https://www.sec.gov/data-research/structured-data/structured-disclosure-rss-feeds
 - EIA RSS feeds: https://www.eia.gov/tools/rssfeeds/
 - EIA Weekly Petroleum Status Report: https://www.eia.gov/petroleum/supply/weekly/
+- BLS RSS feeds: https://www.bls.gov/rss/
 - FRED: https://fred.stlouisfed.org/

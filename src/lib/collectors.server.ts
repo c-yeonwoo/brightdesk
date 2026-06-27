@@ -30,6 +30,7 @@ export interface CollectorConfig {
   kind: CollectorKind;
   source: SourceType;
   feedEnvKey: string;
+  defaultFeedUrl?: string;
   reliability: number;
   limit: number;
   bodySuffix?: string;
@@ -191,7 +192,7 @@ class RssCollectorStrategy implements CollectorStrategy {
   constructor(private readonly cfg: CollectorConfig) {}
 
   private get url() {
-    return process.env[this.cfg.feedEnvKey] ?? null;
+    return process.env[this.cfg.feedEnvKey] ?? this.cfg.defaultFeedUrl ?? null;
   }
 
   get source() {
@@ -199,6 +200,8 @@ class RssCollectorStrategy implements CollectorStrategy {
   }
 
   isEnabled() {
+    const enabledFlag = process.env[`${this.cfg.feedEnvKey}_ENABLED`];
+    if (enabledFlag && enabledFlag.toLowerCase() === "false") return false;
     return Boolean(this.url);
   }
 
@@ -703,6 +706,7 @@ const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
     kind: "rss",
     source: "fed_rss",
     feedEnvKey: "BRIGHTDESK_FED_RSS_URL",
+    defaultFeedUrl: "https://www.federalreserve.gov/feeds/press_all.xml",
     reliability: 0.9,
     bodySuffix: "source=federal-reserve",
     limit: 8,
@@ -713,6 +717,7 @@ const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
     kind: "rss",
     source: "sec_rss",
     feedEnvKey: "BRIGHTDESK_SEC_RSS_URL",
+    defaultFeedUrl: "https://www.sec.gov/news/pressreleases.rss",
     reliability: 0.9,
     bodySuffix: "source=sec",
     limit: 8,
@@ -723,9 +728,21 @@ const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
     kind: "rss",
     source: "eia_rss",
     feedEnvKey: "BRIGHTDESK_EIA_RSS_URL",
+    defaultFeedUrl: "https://www.eia.gov/todayinenergy/rss.php",
     reliability: 0.85,
     bodySuffix: "source=eia",
     limit: 6,
+    parserVersion: "kb-facts-v1",
+  },
+  {
+    displayName: "BLS Economic Releases RSS",
+    kind: "rss",
+    source: "bls_rss",
+    feedEnvKey: "BRIGHTDESK_BLS_RSS_URL",
+    defaultFeedUrl: "https://www.bls.gov/feed/news_release_all.rss",
+    reliability: 0.9,
+    bodySuffix: "source=bls",
+    limit: 8,
     parserVersion: "kb-facts-v1",
   },
   {
@@ -770,18 +787,53 @@ const DEFAULT_COLLECTOR_CONFIGS: CollectorConfig[] = [
   },
 ];
 
+function parseExtraRssCollectorConfigs(): CollectorConfig[] {
+  const raw = process.env.BRIGHTDESK_EXTRA_RSS_SOURCES_JSON;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as Array<Partial<CollectorConfig> & { url?: string }>;
+    return parsed
+      .map((item, index) => {
+        const source = String(item.source ?? `extra_rss_${index + 1}`)
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, "_");
+        const url = String(item.url ?? item.defaultFeedUrl ?? "").trim();
+        return {
+          displayName: String(item.displayName ?? source),
+          kind: "rss" as const,
+          source,
+          feedEnvKey: `BRIGHTDESK_EXTRA_RSS_${index + 1}_URL`,
+          defaultFeedUrl: url,
+          reliability: clamp01(Number(item.reliability ?? 0.65), 0.65),
+          bodySuffix: item.bodySuffix ?? `source=${source}`,
+          limit: toInt(String(item.limit ?? ""), 6),
+          parserVersion: item.parserVersion ?? "kb-facts-v1",
+        };
+      })
+      .filter((item) => Boolean(item.source && item.defaultFeedUrl?.startsWith("http")));
+  } catch {
+    return [];
+  }
+}
+
+function getCollectorConfigs() {
+  return [...DEFAULT_COLLECTOR_CONFIGS, ...parseExtraRssCollectorConfigs()];
+}
+
 export const collectors: CollectorStrategy[] = [
-  ...buildCollectors(DEFAULT_COLLECTOR_CONFIGS, rssCollectorFactory),
+  ...buildCollectors(getCollectorConfigs(), rssCollectorFactory),
   createNaverNewsCollector(),
 ];
 
 export function getCollectorProfiles(): SourceProfile[] {
   return [
-    ...DEFAULT_COLLECTOR_CONFIGS.map((cfg) => ({
+    ...getCollectorConfigs().map((cfg) => ({
       source: cfg.source,
       displayName: cfg.displayName,
       kind: cfg.kind,
-      enabled: Boolean(process.env[cfg.feedEnvKey]),
+      enabled: (process.env[`${cfg.feedEnvKey}_ENABLED`] ?? "true").toLowerCase() !== "false" &&
+        Boolean(process.env[cfg.feedEnvKey] ?? cfg.defaultFeedUrl),
       reliability: cfg.reliability,
       limit: toInt(process.env[`${cfg.feedEnvKey}_LIMIT`], cfg.limit),
       parserVersion: cfg.parserVersion ?? "kb-facts-v1",
